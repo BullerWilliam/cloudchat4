@@ -938,12 +938,26 @@ app.get(
 
 app.get(
   '/users/:userId',
-  requireAuth,
-  loadUser,
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.params.userId)
     if (!user) return res.status(404).json({ error: 'User not found' })
     res.json({ user: sanitizeUser(user) })
+  })
+)
+
+/* ---------- GET USER ID BY USERNAME ---------- */
+app.post(
+  '/users/getid',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const username = normalizeText(req.body.username).toLowerCase()
+    if (!username) return res.status(400).json({ error: 'username is required' })
+
+    const user = await User.findOne({ username })
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    res.json({ id: user._id.toString() })
   })
 )
 

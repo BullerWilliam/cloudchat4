@@ -483,12 +483,7 @@ Authorization: Bearer <token>
 ---
 
 #### GET /users/:userId
-Get a specific user's public profile.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get a specific user's public profile. **No authentication required.**
 
 **Response (200 OK):**
 ```json
@@ -609,6 +604,48 @@ Content-Type: application/json
       "type": "PLAYING"
     }
   }
+}
+```
+
+---
+
+#### POST /users/getid
+Get a user's ID by their username.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "username": "johndoe"
+}
+```
+
+**Fields:**
+- `username` - The username to look up (required, case-insensitive)
+
+**Response (200 OK):**
+```json
+{
+  "id": "65a123..."
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "username is required"
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "User not found"
 }
 ```
 
