@@ -1259,14 +1259,12 @@ app.get(
 
 app.get(
   '/servers/:serverId',
-  requireAuth,
-  loadUser,
-  requireServerMember,
   asyncHandler(async (req, res) => {
     const serverDoc = await Server.findById(req.params.serverId)
+    if (!serverDoc) return res.status(404).json({ error: 'Server not found' })
     const members = await ServerMember.find({
       serverId: req.params.serverId,
-    }).populate('userId', 'username displayName imageUrl')
+    }).populate('userId', 'username displayName imageUrl status activity')
     const roles = await Role.find({ serverId: req.params.serverId }).sort({
       position: 1,
     })
@@ -2328,8 +2326,22 @@ app.patch(
 )
 
 /* ---------- PRESENCE ----------
-   Simple endpoint to set status & activity.
+   Get and set user status & activity.
 */
+app.get(
+  '/users/:userId/presence',
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.params.userId)
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    res.json({
+      userId: user._id.toString(),
+      status: user.status,
+      activity: user.activity,
+      lastSeenAt: user.lastSeenAt,
+    })
+  })
+)
+
 app.patch(
   '/users/:userId/presence',
   requireAuth,

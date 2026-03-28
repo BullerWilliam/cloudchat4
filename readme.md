@@ -572,6 +572,31 @@ Content-Type: application/json
 
 ---
 
+#### GET /users/:userId/presence
+Get a user's presence status. **No authentication required.**
+
+**Response (200 OK):**
+```json
+{
+  "userId": "65a123...",
+  "status": "online",
+  "activity": {
+    "name": "Playing Minecraft",
+    "type": "PLAYING"
+  },
+  "lastSeenAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "User not found"
+}
+```
+
+---
+
 #### PATCH /users/:userId/presence
 Update online status and activity.
 
@@ -604,6 +629,13 @@ Content-Type: application/json
       "type": "PLAYING"
     }
   }
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Cannot set another user presence"
 }
 ```
 
