@@ -1,15 +1,16 @@
 import express from "express"
 import { v4 as uuidv4 } from "uuid"
 import cors from "cors"
-import { InferenceClient } from "@huggingface/inference"
+import HuggingFace from "@huggingface/js-client"
 
 const app = express()
 app.use(express.json())
 app.use(cors())
 
 const PORT = process.env.PORT || 8000
+const HF_TOKEN = process.env.HF_TOKEN || "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"
 
-const client = new InferenceClient(process.env.HF_TOKEN || "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")
+const hf = new HuggingFace(HF_TOKEN)
 
 let chats = {}
 
@@ -21,13 +22,6 @@ app.post("/chat/create", (req, res) => {
     const id = uuidv4()
     chats[id] = []
     res.json({ chatId: id })
-})
-
-app.delete("/chat/:id", (req, res) => {
-    const id = req.params.id
-    if (!chats[id]) return res.status(404).json({ error: "not found" })
-    delete chats[id]
-    res.json({ success: true })
 })
 
 app.post("/chat/:id/delete", (req, res) => {
@@ -53,10 +47,10 @@ app.post("/chat/:id/message", async (req, res) => {
     chats[id].push({ role: "user", content: message })
 
     try {
-        const response = await client.chatCompletion({
+        const response = await hf.chat.completions.create({
             model: "meta-llama/Meta-Llama-3-8B-Instruct",
             messages: chats[id],
-            max_tokens: 100,
+            max_tokens: 120,
             temperature: 0.7
         })
 
@@ -83,12 +77,9 @@ app.get("/chat/:id/export", (req, res) => {
 
 app.post("/chat/import", (req, res) => {
     const { id, messages } = req.body
-
     if (!messages) return res.status(400).json({ error: "no data" })
-
     const newId = id || uuidv4()
     chats[newId] = messages
-
     res.json({ chatId: newId })
 })
 
