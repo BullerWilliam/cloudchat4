@@ -24,16 +24,20 @@ Authorization: Bearer YOUR_TOKEN
 POST /auth/register
 
 Body:
+```json
 {
   "username": "user",
   "email": "mail",
   "password": "pass"
 }
+```
 
 Response:
+```json
 {
   "token": "jwt_token_here"
 }
+```
 
 ---
 
@@ -41,15 +45,19 @@ Response:
 POST /auth/login
 
 Body:
+```json
 {
   "identifier": "username_or_email",
   "password": "pass"
 }
+```
 
 Response:
+```json
 {
   "token": "jwt_token_here"
 }
+```
 
 ---
 
@@ -62,6 +70,7 @@ Headers:
 Authorization: Bearer YOUR_TOKEN
 
 Response:
+```json
 {
   "_id": "userId",
   "username": "user",
@@ -70,6 +79,7 @@ Response:
   "imageUrl": null,
   "friends": []
 }
+```
 
 ---
 
@@ -82,17 +92,21 @@ Headers:
 Authorization: Bearer YOUR_TOKEN
 
 Body:
+```json
 {
   "to": "userId"
 }
+```
 
 Response:
+```json
 {
   "_id": "requestId",
   "from": "yourId",
   "to": "userId",
   "status": "pending"
 }
+```
 
 ---
 
@@ -103,16 +117,20 @@ Headers:
 Authorization: Bearer YOUR_TOKEN
 
 Body:
+```json
 {
   "id": "requestId",
   "accept": true
 }
+```
 
 Response:
+```json
 {
   "_id": "requestId",
   "status": "accepted"
 }
+```
 
 ---
 
@@ -125,12 +143,15 @@ Headers:
 Authorization: Bearer YOUR_TOKEN
 
 Body:
+```json
 {
   "to": "userId",
   "content": "hello"
 }
+```
 
 Response:
+```json
 {
   "_id": "messageId",
   "from": "yourId",
@@ -138,6 +159,7 @@ Response:
   "content": "hello",
   "createdAt": "timestamp"
 }
+```
 
 ---
 
@@ -148,6 +170,7 @@ Headers:
 Authorization: Bearer YOUR_TOKEN
 
 Response:
+```json
 [
   {
     "_id": "messageId",
@@ -157,6 +180,7 @@ Response:
     "createdAt": "timestamp"
   }
 ]
+```
 
 ---
 
