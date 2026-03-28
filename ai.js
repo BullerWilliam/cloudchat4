@@ -1,7 +1,7 @@
 import express from "express"
 import { v4 as uuidv4 } from "uuid"
 import cors from "cors"
-import { HfInference } from "@huggingface/inference"
+import { InferenceClient } from "@huggingface/inference"
 
 const app = express()
 app.use(express.json())
@@ -9,7 +9,7 @@ app.use(cors())
 
 const PORT = 8000
 
-const hf = new HfInference(process.env.HF_TOKEN || "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")
+const client = new InferenceClient(process.env.HF_TOKEN || "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")
 
 let chats = {}
 
@@ -46,7 +46,7 @@ app.post("/chat/:id/message", async (req, res) => {
     chats[id].push({ role: "user", content: message })
 
     try {
-        const response = await hf.chatCompletion({
+        const response = await client.chatCompletion({
             model: "meta-llama/Meta-Llama-3-8B-Instruct",
             messages: chats[id],
             max_tokens: 100,
