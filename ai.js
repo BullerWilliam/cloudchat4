@@ -7,7 +7,7 @@ const app = express()
 app.use(express.json())
 app.use(cors())
 
-const PORT = 8000
+const PORT = process.env.PORT || 8000
 
 const client = new InferenceClient(process.env.HF_TOKEN || "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")
 
@@ -24,6 +24,13 @@ app.post("/chat/create", (req, res) => {
 })
 
 app.delete("/chat/:id", (req, res) => {
+    const id = req.params.id
+    if (!chats[id]) return res.status(404).json({ error: "not found" })
+    delete chats[id]
+    res.json({ success: true })
+})
+
+app.post("/chat/:id/delete", (req, res) => {
     const id = req.params.id
     if (!chats[id]) return res.status(404).json({ error: "not found" })
     delete chats[id]
