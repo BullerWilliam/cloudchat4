@@ -1,17 +1,17 @@
-const express = require('express')
-const http = require('http')
-const cors = require('cors')
-const helmet = require('helmet')
-const rateLimit = require('express-rate-limit')
-const jwt = require('jsonwebtoken')
-const bcrypt = require('bcryptjs')
-const mongoose = require('mongoose')
-const { Server } = require('socket.io')
-const crypto = require('crypto')
+import express from 'express'
+import http from 'http'
+import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
+import mongoose from 'mongoose'
+import { Server as IOServer } from 'socket.io'
+import crypto from 'crypto'
 
 const app = express()
 const server = http.createServer(app)
-const io = new Server(server, {
+const io = new IOServer(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE']
@@ -21,8 +21,7 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret'
 const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD || ''
-
-const mongoUri = process.env.MONGODB_URI || (() => {
+const MONGODB_URI = process.env.MONGODB_URI || (() => {
   const host = process.env.MONGODB_HOST || process.env.MONGO_HOST || 'localhost:27017'
   const db = process.env.MONGODB_DB || 'chatapp'
   const encodedPassword = encodeURIComponent(MONGODB_PASSWORD)
@@ -177,6 +176,20 @@ const DmThread = mongoose.model('DmThread', dmThreadSchema)
 const Message = mongoose.model('Message', messageSchema)
 const Notification = mongoose.model('Notification', notificationSchema)
 
+function sanitizeUser(user) {
+  if (!user) return null
+  return {
+    id: user._id,
+    username: user.username,
+    displayName: user.displayName,
+    email: user.email,
+    imageUrl: user.imageUrl,
+    bio: user.bio,
+    createdAt: user.createdAt,
+    lastSeenAt: user.lastSeenAt
+  }
+}
+
 function signToken(user) {
   return jwt.sign({ id: user._id.toString() }, JWT_SECRET, { expiresIn: '30d' })
 }
@@ -199,6 +212,43 @@ function asyncHandler(fn) {
   }
 }
 
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) return res.status(401).json({ error: 'Missing token' })
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    req.userId = payload.id
+    next()
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' })
+  }
+}
+
+async function loadUser(req, res, next) {
+  const user = await User.findById(req.userId)
+  if (!user) return res.status(401).json({ error: 'Invalid token' })
+  req.user = user
+  next()
+}
+
+async function requireServerMember(req, res, next) {
+  const serverId = req.params.serverId || req.body.serverId || req.query.serverId
+  const member = await ServerMember.findOne({ serverId, userId: req.user._id })
+  if (!member) return res.status(403).json({ error: 'Not a server member' })
+  req.serverMember = member
+  next()
+}
+
+async function requireChannelMember(req, res, next) {
+  const channel = await Channel.findById(req.params.channelId)
+  if (!channel) return res.status(404).json({ error: 'Channel not found' })
+  const member = await ServerMember.findOne({ serverId: channel.serverId, userId: req.user._id })
+  if (!member) return res.status(403).json({ error: 'Not a member of this server' })
+  req.channel = channel
+  next()
+}
+
 async function createNotification(userId, type, title, body, data = {}) {
   const notification = await Notification.create({ userId, type, title, body, data })
   io.to(userId.toString()).emit('notification', notification)
@@ -217,47 +267,12 @@ async function isFriends(userA, userB) {
 
 async function areInSameServer(userA, userB) {
   const aServers = await ServerMember.find({ userId: userA }).select('serverId')
-  const serverIds = aServers.map(x => x.serverId.toString())
-  if (!serverIds.length) return false
   const b = await ServerMember.findOne({ userId: userB, serverId: { $in: aServers.map(x => x.serverId) } })
   return !!b
 }
 
 async function canDM(userA, userB) {
   return (await isFriends(userA, userB)) || (await areInSameServer(userA, userB))
-}
-
-async function requireAuth(req, res, next) {
-  const header = req.headers.authorization || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
-  if (!token) return res.status(401).json({ error: 'Missing token' })
-  try {
-    const payload = jwt.verify(token, JWT_SECRET)
-    const user = await User.findById(payload.id)
-    if (!user) return res.status(401).json({ error: 'Invalid token' })
-    req.user = user
-    next()
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' })
-  }
-}
-
-async function requireServerMember(req, res, next) {
-  const serverId = req.params.serverId || req.body.serverId || req.query.serverId
-  const member = await ServerMember.findOne({ serverId, userId: req.user._id })
-  if (!member) return res.status(403).json({ error: 'Not a server member' })
-  req.serverMember = member
-  next()
-}
-
-async function requireChannelMember(req, res, next) {
-  const channel = await Channel.findById(req.params.channelId)
-  if (!channel) return res.status(404).json({ error: 'Channel not found' })
-  const member = await ServerMember.findOne({ serverId: channel.serverId, userId: req.user._id })
-  if (!member) return res.status(403).json({ error: 'Not a member of this server' })
-  req.channel = channel
-  req.serverIdFromChannel = channel.serverId
-  next()
 }
 
 app.get('/health', (req, res) => {
@@ -286,8 +301,7 @@ app.post('/auth/register', asyncHandler(async (req, res) => {
     imageUrl
   })
 
-  const token = signToken(user)
-  res.status(201).json({ token, user: sanitizeUser(user) })
+  res.status(201).json({ token: signToken(user), user: sanitizeUser(user) })
 }))
 
 app.post('/auth/login', asyncHandler(async (req, res) => {
@@ -307,11 +321,11 @@ app.post('/auth/login', asyncHandler(async (req, res) => {
   res.json({ token: signToken(user), user: sanitizeUser(user) })
 }))
 
-app.get('/auth/me', requireAuth, asyncHandler(async (req, res) => {
+app.get('/auth/me', requireAuth, loadUser, asyncHandler(async (req, res) => {
   res.json({ user: sanitizeUser(req.user) })
 }))
 
-app.patch('/auth/me', requireAuth, asyncHandler(async (req, res) => {
+app.patch('/auth/me', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const updates = {}
   const allowed = ['username', 'displayName', 'email', 'imageUrl', 'bio']
   for (const key of allowed) {
@@ -334,8 +348,8 @@ app.patch('/auth/me', requireAuth, asyncHandler(async (req, res) => {
   res.json({ user: sanitizeUser(req.user) })
 }))
 
-app.get('/users/search', requireAuth, asyncHandler(async (req, res) => {
-  const q = normalizeText(req.query.q).toLowerCase()
+app.get('/users/search', requireAuth, loadUser, asyncHandler(async (req, res) => {
+  const q = normalizeText(req.query.q)
   if (!q) return res.json({ users: [] })
   const users = await User.find({
     $or: [
@@ -347,13 +361,13 @@ app.get('/users/search', requireAuth, asyncHandler(async (req, res) => {
   res.json({ users: users.map(sanitizeUser) })
 }))
 
-app.get('/users/:userId', requireAuth, asyncHandler(async (req, res) => {
+app.get('/users/:userId', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.userId)
   if (!user) return res.status(404).json({ error: 'User not found' })
   res.json({ user: sanitizeUser(user) })
 }))
 
-app.post('/friends/request', requireAuth, asyncHandler(async (req, res) => {
+app.post('/friends/request', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const targetUserId = req.body.targetUserId
   if (!targetUserId) return res.status(400).json({ error: 'targetUserId is required' })
   if (targetUserId.toString() === req.user._id.toString()) return res.status(400).json({ error: 'You cannot add yourself' })
@@ -383,23 +397,22 @@ app.post('/friends/request', requireAuth, asyncHandler(async (req, res) => {
   res.status(201).json({ request })
 }))
 
-app.get('/friends/requests/incoming', requireAuth, asyncHandler(async (req, res) => {
+app.get('/friends/requests/incoming', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const requests = await FriendRequest.find({ toUserId: req.user._id, status: 'pending' }).populate('fromUserId', 'username displayName imageUrl')
   res.json({ requests })
 }))
 
-app.get('/friends/requests/outgoing', requireAuth, asyncHandler(async (req, res) => {
+app.get('/friends/requests/outgoing', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const requests = await FriendRequest.find({ fromUserId: req.user._id, status: 'pending' }).populate('toUserId', 'username displayName imageUrl')
   res.json({ requests })
 }))
 
-app.post('/friends/requests/:requestId/respond', requireAuth, asyncHandler(async (req, res) => {
+app.post('/friends/requests/:requestId/respond', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const action = normalizeText(req.body.action).toLowerCase()
   const request = await FriendRequest.findById(req.params.requestId)
   if (!request) return res.status(404).json({ error: 'Request not found' })
   if (request.toUserId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Not allowed' })
   if (request.status !== 'pending') return res.status(409).json({ error: 'Request already handled' })
-
   if (!['accept', 'decline'].includes(action)) return res.status(400).json({ error: 'action must be accept or decline' })
 
   request.status = action === 'accept' ? 'accepted' : 'declined'
@@ -414,7 +427,7 @@ app.post('/friends/requests/:requestId/respond', requireAuth, asyncHandler(async
   res.json({ request })
 }))
 
-app.get('/friends/list', requireAuth, asyncHandler(async (req, res) => {
+app.get('/friends/list', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const requests = await FriendRequest.find({
     status: 'accepted',
     $or: [{ fromUserId: req.user._id }, { toUserId: req.user._id }]
@@ -422,15 +435,11 @@ app.get('/friends/list', requireAuth, asyncHandler(async (req, res) => {
     .populate('fromUserId', 'username displayName imageUrl')
     .populate('toUserId', 'username displayName imageUrl')
 
-  const friends = requests.map(r => {
-    const other = r.fromUserId._id.toString() === req.user._id.toString() ? r.toUserId : r.fromUserId
-    return other
-  })
-
+  const friends = requests.map(r => (r.fromUserId._id.toString() === req.user._id.toString() ? r.toUserId : r.fromUserId))
   res.json({ friends })
 }))
 
-app.post('/servers', requireAuth, asyncHandler(async (req, res) => {
+app.post('/servers', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const name = normalizeText(req.body.name)
   if (!name) return res.status(400).json({ error: 'name is required' })
 
@@ -443,8 +452,6 @@ app.post('/servers', requireAuth, asyncHandler(async (req, res) => {
     inviteCode: makeInviteCode()
   })
 
-  await ServerMember.create({ serverId: serverDoc._id, userId: req.user._id, roleIds: [] })
-
   const everyoneRole = await Role.create({
     serverId: serverDoc._id,
     name: '@everyone',
@@ -454,7 +461,7 @@ app.post('/servers', requireAuth, asyncHandler(async (req, res) => {
     mentionable: false
   })
 
-  await ServerMember.updateOne({ serverId: serverDoc._id, userId: req.user._id }, { $set: { roleIds: [everyoneRole._id] } })
+  await ServerMember.create({ serverId: serverDoc._id, userId: req.user._id, roleIds: [everyoneRole._id] })
 
   const generalCategory = await Category.create({ serverId: serverDoc._id, name: 'General', position: 0 })
   await Channel.create({ serverId: serverDoc._id, categoryId: generalCategory._id, name: 'general', type: 'text', position: 0 })
@@ -463,12 +470,12 @@ app.post('/servers', requireAuth, asyncHandler(async (req, res) => {
   res.status(201).json({ server: serverDoc })
 }))
 
-app.get('/servers', requireAuth, asyncHandler(async (req, res) => {
+app.get('/servers', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const memberships = await ServerMember.find({ userId: req.user._id }).populate('serverId')
   res.json({ servers: memberships.map(m => m.serverId) })
 }))
 
-app.get('/servers/:serverId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.get('/servers/:serverId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   const members = await ServerMember.find({ serverId: req.params.serverId }).populate('userId', 'username displayName imageUrl')
   const roles = await Role.find({ serverId: req.params.serverId }).sort({ position: 1 })
@@ -477,7 +484,7 @@ app.get('/servers/:serverId', requireAuth, requireServerMember, asyncHandler(asy
   res.json({ server: serverDoc, members, roles, categories, channels })
 }))
 
-app.patch('/servers/:serverId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.patch('/servers/:serverId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (!serverDoc) return res.status(404).json({ error: 'Server not found' })
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can edit this server' })
@@ -490,7 +497,7 @@ app.patch('/servers/:serverId', requireAuth, requireServerMember, asyncHandler(a
   res.json({ server: serverDoc })
 }))
 
-app.post('/servers/:serverId/invites', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/invites', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const inviteeId = req.body.inviteeId || null
   const invitee = inviteeId ? await User.findById(inviteeId) : null
   if (inviteeId && !invitee) return res.status(404).json({ error: 'Invitee not found' })
@@ -510,12 +517,12 @@ app.post('/servers/:serverId/invites', requireAuth, requireServerMember, asyncHa
   res.status(201).json({ invite })
 }))
 
-app.get('/servers/:serverId/invites', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.get('/servers/:serverId/invites', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const invites = await ServerInvite.find({ serverId: req.params.serverId }).sort({ createdAt: -1 })
   res.json({ invites })
 }))
 
-app.post('/server-invites/:inviteId/respond', requireAuth, asyncHandler(async (req, res) => {
+app.post('/server-invites/:inviteId/respond', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const action = normalizeText(req.body.action).toLowerCase()
   const invite = await ServerInvite.findById(req.params.inviteId)
   if (!invite) return res.status(404).json({ error: 'Invite not found' })
@@ -541,7 +548,7 @@ app.post('/server-invites/:inviteId/respond', requireAuth, asyncHandler(async (r
   res.json({ invite })
 }))
 
-app.post('/servers/:serverId/join', requireAuth, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/join', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const code = normalizeText(req.body.code)
   const serverDoc = await Server.findById(req.params.serverId)
   if (!serverDoc) return res.status(404).json({ error: 'Server not found' })
@@ -559,7 +566,7 @@ app.post('/servers/:serverId/join', requireAuth, asyncHandler(async (req, res) =
   res.json({ ok: true })
 }))
 
-app.post('/servers/:serverId/leave', requireAuth, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/leave', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (!serverDoc) return res.status(404).json({ error: 'Server not found' })
   if (serverDoc.ownerId.toString() === req.user._id.toString()) return res.status(400).json({ error: 'Owner cannot leave the server' })
@@ -567,7 +574,7 @@ app.post('/servers/:serverId/leave', requireAuth, asyncHandler(async (req, res) 
   res.json({ ok: true })
 }))
 
-app.post('/servers/:serverId/roles', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/roles', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage roles' })
 
@@ -580,10 +587,11 @@ app.post('/servers/:serverId/roles', requireAuth, requireServerMember, asyncHand
     hoist: Boolean(req.body.hoist),
     mentionable: Boolean(req.body.mentionable)
   })
+
   res.status(201).json({ role })
 }))
 
-app.patch('/servers/:serverId/roles/:roleId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.patch('/servers/:serverId/roles/:roleId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage roles' })
   const role = await Role.findOne({ _id: req.params.roleId, serverId: req.params.serverId })
@@ -598,7 +606,7 @@ app.patch('/servers/:serverId/roles/:roleId', requireAuth, requireServerMember, 
   res.json({ role })
 }))
 
-app.delete('/servers/:serverId/roles/:roleId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.delete('/servers/:serverId/roles/:roleId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage roles' })
   await Role.deleteOne({ _id: req.params.roleId, serverId: req.params.serverId })
@@ -606,7 +614,7 @@ app.delete('/servers/:serverId/roles/:roleId', requireAuth, requireServerMember,
   res.json({ ok: true })
 }))
 
-app.post('/servers/:serverId/categories', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/categories', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage categories' })
   const category = await Category.create({
@@ -617,7 +625,7 @@ app.post('/servers/:serverId/categories', requireAuth, requireServerMember, asyn
   res.status(201).json({ category })
 }))
 
-app.patch('/servers/:serverId/categories/:categoryId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.patch('/servers/:serverId/categories/:categoryId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage categories' })
   const category = await Category.findOne({ _id: req.params.categoryId, serverId: req.params.serverId })
@@ -628,7 +636,7 @@ app.patch('/servers/:serverId/categories/:categoryId', requireAuth, requireServe
   res.json({ category })
 }))
 
-app.delete('/servers/:serverId/categories/:categoryId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.delete('/servers/:serverId/categories/:categoryId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage categories' })
   await Channel.updateMany({ serverId: req.params.serverId, categoryId: req.params.categoryId }, { $set: { categoryId: null } })
@@ -636,7 +644,7 @@ app.delete('/servers/:serverId/categories/:categoryId', requireAuth, requireServ
   res.json({ ok: true })
 }))
 
-app.post('/servers/:serverId/channels', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/channels', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage channels' })
   const channel = await Channel.create({
@@ -652,7 +660,7 @@ app.post('/servers/:serverId/channels', requireAuth, requireServerMember, asyncH
   res.status(201).json({ channel })
 }))
 
-app.patch('/servers/:serverId/channels/:channelId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.patch('/servers/:serverId/channels/:channelId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage channels' })
   const channel = await Channel.findOne({ _id: req.params.channelId, serverId: req.params.serverId })
@@ -668,19 +676,19 @@ app.patch('/servers/:serverId/channels/:channelId', requireAuth, requireServerMe
   res.json({ channel })
 }))
 
-app.delete('/servers/:serverId/channels/:channelId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.delete('/servers/:serverId/channels/:channelId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage channels' })
   await Channel.deleteOne({ _id: req.params.channelId, serverId: req.params.serverId })
   res.json({ ok: true })
 }))
 
-app.get('/servers/:serverId/members', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.get('/servers/:serverId/members', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const members = await ServerMember.find({ serverId: req.params.serverId }).populate('userId', 'username displayName imageUrl')
   res.json({ members })
 }))
 
-app.post('/servers/:serverId/members/:userId/roles', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.post('/servers/:serverId/members/:userId/roles', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can manage member roles' })
   const roleIds = Array.isArray(req.body.roleIds) ? req.body.roleIds : []
@@ -691,14 +699,14 @@ app.post('/servers/:serverId/members/:userId/roles', requireAuth, requireServerM
   res.json({ member })
 }))
 
-app.delete('/servers/:serverId/members/:userId', requireAuth, requireServerMember, asyncHandler(async (req, res) => {
+app.delete('/servers/:serverId/members/:userId', requireAuth, loadUser, requireServerMember, asyncHandler(async (req, res) => {
   const serverDoc = await Server.findById(req.params.serverId)
   if (serverDoc.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can remove members' })
   await ServerMember.deleteOne({ serverId: req.params.serverId, userId: req.params.userId })
   res.json({ ok: true })
 }))
 
-app.post('/groups', requireAuth, asyncHandler(async (req, res) => {
+app.post('/groups', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const name = normalizeText(req.body.name)
   if (!name) return res.status(400).json({ error: 'name is required' })
   const memberIds = Array.isArray(req.body.memberIds) ? req.body.memberIds.filter(Boolean) : []
@@ -709,18 +717,18 @@ app.post('/groups', requireAuth, asyncHandler(async (req, res) => {
   res.status(201).json({ group })
 }))
 
-app.get('/groups', requireAuth, asyncHandler(async (req, res) => {
+app.get('/groups', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const groups = await Group.find({ memberIds: req.user._id })
   res.json({ groups })
 }))
 
-app.get('/groups/:groupId', requireAuth, asyncHandler(async (req, res) => {
+app.get('/groups/:groupId', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const group = await Group.findOne({ _id: req.params.groupId, memberIds: req.user._id })
   if (!group) return res.status(404).json({ error: 'Group not found' })
   res.json({ group })
 }))
 
-app.post('/groups/:groupId/members', requireAuth, asyncHandler(async (req, res) => {
+app.post('/groups/:groupId/members', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const group = await Group.findOne({ _id: req.params.groupId, memberIds: req.user._id })
   if (!group) return res.status(404).json({ error: 'Group not found' })
   if (group.ownerId.toString() !== req.user._id.toString()) return res.status(403).json({ error: 'Only the owner can add members' })
@@ -733,7 +741,7 @@ app.post('/groups/:groupId/members', requireAuth, asyncHandler(async (req, res) 
   res.json({ group })
 }))
 
-app.delete('/groups/:groupId/members/:userId', requireAuth, asyncHandler(async (req, res) => {
+app.delete('/groups/:groupId/members/:userId', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const group = await Group.findOne({ _id: req.params.groupId, memberIds: req.user._id })
   if (!group) return res.status(404).json({ error: 'Group not found' })
   if (group.ownerId.toString() !== req.user._id.toString() && req.params.userId !== req.user._id.toString()) return res.status(403).json({ error: 'Not allowed' })
@@ -742,7 +750,7 @@ app.delete('/groups/:groupId/members/:userId', requireAuth, asyncHandler(async (
   res.json({ group })
 }))
 
-app.post('/groups/:groupId/messages', requireAuth, asyncHandler(async (req, res) => {
+app.post('/groups/:groupId/messages', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const group = await Group.findOne({ _id: req.params.groupId, memberIds: req.user._id })
   if (!group) return res.status(404).json({ error: 'Group not found' })
   const content = normalizeText(req.body.content)
@@ -752,19 +760,19 @@ app.post('/groups/:groupId/messages', requireAuth, asyncHandler(async (req, res)
   res.status(201).json({ message })
 }))
 
-app.get('/groups/:groupId/messages', requireAuth, asyncHandler(async (req, res) => {
+app.get('/groups/:groupId/messages', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const group = await Group.findOne({ _id: req.params.groupId, memberIds: req.user._id })
   if (!group) return res.status(404).json({ error: 'Group not found' })
   const messages = await Message.find({ kind: 'group', groupId: group._id }).sort({ createdAt: 1 }).limit(500)
   res.json({ messages })
 }))
 
-app.get('/dm/threads', requireAuth, asyncHandler(async (req, res) => {
+app.get('/dm/threads', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const threads = await DmThread.find({ memberIds: req.user._id }).sort({ lastMessageAt: -1 })
   res.json({ threads })
 }))
 
-app.post('/dm/send', requireAuth, asyncHandler(async (req, res) => {
+app.post('/dm/send', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const toUserId = req.body.toUserId
   const content = normalizeText(req.body.content)
   if (!toUserId || !content) return res.status(400).json({ error: 'toUserId and content are required' })
@@ -777,9 +785,7 @@ app.post('/dm/send', requireAuth, asyncHandler(async (req, res) => {
 
   const key = getDmKey(req.user._id, target._id)
   let thread = await DmThread.findOne({ key })
-  if (!thread) {
-    thread = await DmThread.create({ key, memberIds: [req.user._id, target._id] })
-  }
+  if (!thread) thread = await DmThread.create({ key, memberIds: [req.user._id, target._id] })
 
   thread.lastMessageAt = new Date()
   await thread.save()
@@ -791,14 +797,14 @@ app.post('/dm/send', requireAuth, asyncHandler(async (req, res) => {
   res.status(201).json({ thread, message })
 }))
 
-app.get('/dm/threads/:threadId/messages', requireAuth, asyncHandler(async (req, res) => {
+app.get('/dm/threads/:threadId/messages', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const thread = await DmThread.findOne({ _id: req.params.threadId, memberIds: req.user._id })
   if (!thread) return res.status(404).json({ error: 'Thread not found' })
   const messages = await Message.find({ kind: 'dm', threadId: thread._id }).sort({ createdAt: 1 }).limit(500)
   res.json({ messages })
 }))
 
-app.post('/channels/:channelId/messages', requireAuth, requireChannelMember, asyncHandler(async (req, res) => {
+app.post('/channels/:channelId/messages', requireAuth, loadUser, requireChannelMember, asyncHandler(async (req, res) => {
   const content = normalizeText(req.body.content)
   if (!content) return res.status(400).json({ error: 'content is required' })
   const message = await Message.create({
@@ -813,17 +819,17 @@ app.post('/channels/:channelId/messages', requireAuth, requireChannelMember, asy
   res.status(201).json({ message })
 }))
 
-app.get('/channels/:channelId/messages', requireAuth, requireChannelMember, asyncHandler(async (req, res) => {
+app.get('/channels/:channelId/messages', requireAuth, loadUser, requireChannelMember, asyncHandler(async (req, res) => {
   const messages = await Message.find({ kind: 'server', channelId: req.channel._id }).sort({ createdAt: 1 }).limit(500)
   res.json({ messages })
 }))
 
-app.get('/notifications', requireAuth, asyncHandler(async (req, res) => {
+app.get('/notifications', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(100)
   res.json({ notifications })
 }))
 
-app.post('/notifications/:notificationId/read', requireAuth, asyncHandler(async (req, res) => {
+app.post('/notifications/:notificationId/read', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const notification = await Notification.findOne({ _id: req.params.notificationId, userId: req.user._id })
   if (!notification) return res.status(404).json({ error: 'Notification not found' })
   notification.readAt = new Date()
@@ -831,13 +837,13 @@ app.post('/notifications/:notificationId/read', requireAuth, asyncHandler(async 
   res.json({ notification })
 }))
 
-app.post('/notifications/read-all', requireAuth, asyncHandler(async (req, res) => {
+app.post('/notifications/read-all', requireAuth, loadUser, asyncHandler(async (req, res) => {
   await Notification.updateMany({ userId: req.user._id, readAt: null }, { $set: { readAt: new Date() } })
   res.json({ ok: true })
 }))
 
-app.get('/search', requireAuth, asyncHandler(async (req, res) => {
-  const q = normalizeText(req.query.q).toLowerCase()
+app.get('/search', requireAuth, loadUser, asyncHandler(async (req, res) => {
+  const q = normalizeText(req.query.q)
   if (!q) return res.json({ users: [], servers: [], groups: [] })
   const users = await User.find({ $or: [{ username: new RegExp(q, 'i') }, { displayName: new RegExp(q, 'i') }] }).limit(20)
   const serverIds = await ServerMember.find({ userId: req.user._id }).distinct('serverId')
@@ -855,20 +861,6 @@ app.use((err, req, res, next) => {
   const message = err.message || 'Server error'
   res.status(status).json({ error: message })
 })
-
-function sanitizeUser(user) {
-  if (!user) return null
-  return {
-    id: user._id,
-    username: user.username,
-    displayName: user.displayName,
-    email: user.email,
-    imageUrl: user.imageUrl,
-    bio: user.bio,
-    createdAt: user.createdAt,
-    lastSeenAt: user.lastSeenAt
-  }
-}
 
 io.use(async (socket, next) => {
   try {
@@ -888,19 +880,13 @@ io.on('connection', async socket => {
   socket.join(socket.user._id.toString())
 
   const servers = await ServerMember.find({ userId: socket.user._id }).select('serverId')
-  for (const member of servers) {
-    socket.join(`server:${member.serverId.toString()}`)
-  }
+  for (const member of servers) socket.join(`server:${member.serverId.toString()}`)
 
   const groups = await Group.find({ memberIds: socket.user._id }).select('_id')
-  for (const group of groups) {
-    socket.join(`group:${group._id.toString()}`)
-  }
+  for (const group of groups) socket.join(`group:${group._id.toString()}`)
 
   const dms = await DmThread.find({ memberIds: socket.user._id }).select('_id')
-  for (const thread of dms) {
-    socket.join(`dm:${thread._id.toString()}`)
-  }
+  for (const thread of dms) socket.join(`dm:${thread._id.toString()}`)
 
   socket.on('join_server', async serverId => {
     const member = await ServerMember.findOne({ serverId, userId: socket.user._id })
@@ -937,7 +923,7 @@ io.on('connection', async socket => {
 
 async function start() {
   try {
-    await mongoose.connect(mongoUri)
+    await mongoose.connect(MONGODB_URI)
     server.listen(PORT, () => {
       console.log(`API running on port ${PORT}`)
     })
