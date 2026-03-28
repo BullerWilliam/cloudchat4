@@ -1,28 +1,17 @@
 import express from 'express'
-import http from 'http'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
-import { Server as IOServer } from 'socket.io'
 import crypto from 'crypto'
 
 const app = express()
-const server = http.createServer(app)
-const io = new IOServer(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PATCH', 'DELETE']
-  }
-})
-
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret'
-const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD || ''
+const MONGODB_URL = process.env.MONGODB_URL || `mongodb+srv://mongo:${encodeURIComponent(process.env.MONGODB_PASSWORD || '')}@cloudchat4.aoxoo9t.mongodb.net/?appName=cloudchat4`
 const ADMIN_AUTH = process.env.ADMIN_AUTH || 'admin-auth'
-const MONGODB_URL = process.env.MONGODB_URL || `mongodb+srv://mongo:${encodeURIComponent(MONGODB_PASSWORD)}@cloudchat4.aoxoo9t.mongodb.net/?appName=cloudchat4`
 
 app.use(helmet())
 app.use(cors({ origin: '*', credentials: true }))
@@ -159,6 +148,12 @@ const notificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 })
 
+const healthPingSchema = new mongoose.Schema({
+  source: { type: String, default: 'internal' },
+  payload: { type: Object, default: {} },
+  createdAt: { type: Date, default: Date.now }
+})
+
 const User = mongoose.model('User', userSchema)
 const FriendRequest = mongoose.model('FriendRequest', friendRequestSchema)
 const Server = mongoose.model('Server', serverSchema)
@@ -171,6 +166,7 @@ const Group = mongoose.model('Group', groupSchema)
 const DmThread = mongoose.model('DmThread', dmThreadSchema)
 const Message = mongoose.model('Message', messageSchema)
 const Notification = mongoose.model('Notification', notificationSchema)
+const HealthPing = mongoose.model('HealthPing', healthPingSchema)
 
 function sanitizeUser(user) {
   if (!user) return null
@@ -247,7 +243,6 @@ async function requireChannelMember(req, res, next) {
 
 async function createNotification(userId, type, title, body, data = {}) {
   const notification = await Notification.create({ userId, type, title, body, data })
-  io.to(userId.toString()).emit('notification', notification)
   return notification
 }
 
@@ -271,26 +266,54 @@ async function canDM(userA, userB) {
   return (await isFriends(userA, userB)) || (await areInSameServer(userA, userB))
 }
 
-async function clearDatabase() {
-  await Promise.all([
-    User.deleteMany({}),
-    FriendRequest.deleteMany({}),
-    Server.deleteMany({}),
-    ServerMember.deleteMany({}),
-    Role.deleteMany({}),
-    Category.deleteMany({}),
-    Channel.deleteMany({}),
-    ServerInvite.deleteMany({}),
-    Group.deleteMany({}),
-    DmThread.deleteMany({}),
-    Message.deleteMany({}),
-    Notification.deleteMany({})
-  ])
-}
+app.get('/health', asyncHandler(async (req, res) => {
+  const ping = await HealthPing.create({
+    source: 'request',
+    payload: {
+      ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '',
+      query: req.query,
+      time: new Date().toISOString()
+    }
+  })
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString(),
+    pingId: ping._id,
+    random: Math.random()
+  })
+}))
 
-app.get('/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime() })
-})
+app.post('/health', asyncHandler(async (req, res) => {
+  const ping = await HealthPing.create({
+    source: 'internal',
+    payload: req.body || {}
+  })
+  res.json({
+    status: 'ok',
+    stored: true,
+    pingId: ping._id,
+    received: req.body || {}
+  })
+}))
+
+function scheduleSelfPing() {
+  const delay = Math.floor(Math.random() * 30000) + 15000
+  setTimeout(async () => {
+    try {
+      const payload = {
+        nonce: crypto.randomBytes(6).toString('hex'),
+        timestamp: Date.now(),
+        value: Math.random()
+      }
+      await fetch(`http://127.0.0.1:${PORT}/health`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    } catch {}
+    scheduleSelfPing()
+  }, delay)
+}
 
 app.post('/auth/register', asyncHandler(async (req, res) => {
   const username = normalizeText(req.body.username).toLowerCase()
@@ -406,7 +429,6 @@ app.post('/friends/request', requireAuth, loadUser, asyncHandler(async (req, res
 
   const request = await FriendRequest.create({ fromUserId: req.user._id, toUserId: target._id })
   await createNotification(target._id, 'friend_request', 'Friend request', `${req.user.displayName || req.user.username} sent you a friend request`, { friendRequestId: request._id })
-  io.to(target._id.toString()).emit('friend_request', request)
   res.status(201).json({ request })
 }))
 
@@ -769,7 +791,6 @@ app.post('/groups/:groupId/messages', requireAuth, loadUser, asyncHandler(async 
   const content = normalizeText(req.body.content)
   if (!content) return res.status(400).json({ error: 'content is required' })
   const message = await Message.create({ kind: 'group', senderId: req.user._id, groupId: group._id, content })
-  io.to(`group:${group._id.toString()}`).emit('message', message)
   res.status(201).json({ message })
 }))
 
@@ -804,8 +825,6 @@ app.post('/dm/send', requireAuth, loadUser, asyncHandler(async (req, res) => {
   await thread.save()
 
   const message = await Message.create({ kind: 'dm', senderId: req.user._id, recipientId: target._id, threadId: thread._id, content })
-  io.to(`dm:${thread._id.toString()}`).emit('message', message)
-  io.to(target._id.toString()).emit('dm_message', message)
   await createNotification(target._id, 'message', 'New direct message', `${req.user.displayName || req.user.username} sent you a message`, { threadId: thread._id, messageId: message._id })
   res.status(201).json({ thread, message })
 }))
@@ -828,7 +847,6 @@ app.post('/channels/:channelId/messages', requireAuth, loadUser, requireChannelM
     content,
     attachments: Array.isArray(req.body.attachments) ? req.body.attachments : []
   })
-  io.to(`channel:${req.channel._id.toString()}`).emit('message', message)
   res.status(201).json({ message })
 }))
 
@@ -867,11 +885,22 @@ app.get('/search', requireAuth, loadUser, asyncHandler(async (req, res) => {
 
 app.post('/clear-db', asyncHandler(async (req, res) => {
   const key = normalizeText(req.body.key)
-  if (key !== ADMIN_AUTH) {
-    return res.status(403).json({ error: 'Invalid admin key' })
-  }
-
-  await clearDatabase()
+  if (key !== ADMIN_AUTH) return res.status(403).json({ error: 'Invalid admin key' })
+  await Promise.all([
+    User.deleteMany({}),
+    FriendRequest.deleteMany({}),
+    Server.deleteMany({}),
+    ServerMember.deleteMany({}),
+    Role.deleteMany({}),
+    Category.deleteMany({}),
+    Channel.deleteMany({}),
+    ServerInvite.deleteMany({}),
+    Group.deleteMany({}),
+    DmThread.deleteMany({}),
+    Message.deleteMany({}),
+    Notification.deleteMany({}),
+    HealthPing.deleteMany({})
+  ])
   res.json({ ok: true, cleared: true })
 }))
 
@@ -885,69 +914,11 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message })
 })
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token || (socket.handshake.headers.authorization || '').replace('Bearer ', '')
-    if (!token) return next(new Error('Missing token'))
-    const payload = jwt.verify(token, JWT_SECRET)
-    const user = await User.findById(payload.id)
-    if (!user) return next(new Error('Invalid token'))
-    socket.user = user
-    next()
-  } catch {
-    next(new Error('Invalid token'))
-  }
-})
-
-io.on('connection', async socket => {
-  socket.join(socket.user._id.toString())
-
-  const servers = await ServerMember.find({ userId: socket.user._id }).select('serverId')
-  for (const member of servers) socket.join(`server:${member.serverId.toString()}`)
-
-  const groups = await Group.find({ memberIds: socket.user._id }).select('_id')
-  for (const group of groups) socket.join(`group:${group._id.toString()}`)
-
-  const dms = await DmThread.find({ memberIds: socket.user._id }).select('_id')
-  for (const thread of dms) socket.join(`dm:${thread._id.toString()}`)
-
-  socket.on('join_server', async serverId => {
-    const member = await ServerMember.findOne({ serverId, userId: socket.user._id })
-    if (member) socket.join(`server:${serverId}`)
-  })
-
-  socket.on('join_channel', async channelId => {
-    const channel = await Channel.findById(channelId)
-    if (!channel) return
-    const member = await ServerMember.findOne({ serverId: channel.serverId, userId: socket.user._id })
-    if (member) socket.join(`channel:${channelId}`)
-  })
-
-  socket.on('join_group', async groupId => {
-    const group = await Group.findOne({ _id: groupId, memberIds: socket.user._id })
-    if (group) socket.join(`group:${groupId}`)
-  })
-
-  socket.on('join_dm', async threadId => {
-    const thread = await DmThread.findOne({ _id: threadId, memberIds: socket.user._id })
-    if (thread) socket.join(`dm:${threadId}`)
-  })
-
-  socket.on('typing', data => {
-    if (data?.channelId) socket.to(`channel:${data.channelId}`).emit('typing', { userId: socket.user._id, channelId: data.channelId })
-    if (data?.groupId) socket.to(`group:${data.groupId}`).emit('typing', { userId: socket.user._id, groupId: data.groupId })
-    if (data?.threadId) socket.to(`dm:${data.threadId}`).emit('typing', { userId: socket.user._id, threadId: data.threadId })
-  })
-
-  socket.on('disconnect', async () => {
-    await User.updateOne({ _id: socket.user._id }, { $set: { lastSeenAt: new Date() } })
-  })
-})
-
 async function start() {
   try {
     await mongoose.connect(MONGODB_URL)
-    server.listen(PORT, () => {
+    scheduleSelfPing()
+    app.listen(PORT, () => {
       console.log(`API running on port ${PORT}`)
     })
   } catch (error) {
