@@ -184,6 +184,17 @@ Response:
 
 ---
 
+## Admin
+
+### Clear Database
+POST /clear-db
+
+Body:
+```json
+{
+  "key": "admin-auth"
+}
+
 ## Notes
 
 - All protected routes require JWT

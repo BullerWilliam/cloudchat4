@@ -21,6 +21,7 @@ const io = new IOServer(server, {
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret'
 const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD || ''
+const ADMIN_AUTH = process.env.ADMIN_AUTH || 'admin-auth'
 const MONGODB_URL = process.env.MONGODB_URL || `mongodb+srv://mongo:${encodeURIComponent(MONGODB_PASSWORD)}@cloudchat4.aoxoo9t.mongodb.net/?appName=cloudchat4`
 
 app.use(helmet())
@@ -268,6 +269,23 @@ async function areInSameServer(userA, userB) {
 
 async function canDM(userA, userB) {
   return (await isFriends(userA, userB)) || (await areInSameServer(userA, userB))
+}
+
+async function clearDatabase() {
+  await Promise.all([
+    User.deleteMany({}),
+    FriendRequest.deleteMany({}),
+    Server.deleteMany({}),
+    ServerMember.deleteMany({}),
+    Role.deleteMany({}),
+    Category.deleteMany({}),
+    Channel.deleteMany({}),
+    ServerInvite.deleteMany({}),
+    Group.deleteMany({}),
+    DmThread.deleteMany({}),
+    Message.deleteMany({}),
+    Notification.deleteMany({})
+  ])
 }
 
 app.get('/health', (req, res) => {
@@ -845,6 +863,16 @@ app.get('/search', requireAuth, loadUser, asyncHandler(async (req, res) => {
   const servers = await Server.find({ _id: { $in: serverIds }, name: new RegExp(q, 'i') }).limit(20)
   const groups = await Group.find({ memberIds: req.user._id, name: new RegExp(q, 'i') }).limit(20)
   res.json({ users: users.map(sanitizeUser), servers, groups })
+}))
+
+app.post('/clear-db', asyncHandler(async (req, res) => {
+  const key = normalizeText(req.body.key)
+  if (key !== ADMIN_AUTH) {
+    return res.status(403).json({ error: 'Invalid admin key' })
+  }
+
+  await clearDatabase()
+  res.json({ ok: true, cleared: true })
 }))
 
 app.use((req, res) => {
