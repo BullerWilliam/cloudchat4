@@ -64,7 +64,7 @@ Response:
 ## User
 
 ### Get Current User
-GET /me
+GET /auth/me
 
 Headers:
 Authorization: Bearer YOUR_TOKEN
