@@ -7,16 +7,14 @@ const app = express()
 app.use(express.json())
 app.use(cors())
 
-const PORT = process.env.PORT || 8000
+// Use Railway port, fallback to 8000 locally
+const PORT = 8000
 const HF_TOKEN = process.env.HF_TOKEN || "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"
 
 const hf = new HfInference(HF_TOKEN)
-
 let chats = {}
 
-app.get("/", (req, res) => {
-    res.json({ status: "running", port: PORT })
-})
+app.get("/", (req, res) => res.json({ status: "running", port: PORT }))
 
 app.post("/chat/create", (req, res) => {
     const id = uuidv4()
@@ -55,9 +53,7 @@ app.post("/chat/:id/message", async (req, res) => {
         })
 
         const reply = response.choices[0].message.content
-
         chats[id].push({ role: "assistant", content: reply })
-
         res.json({ reply })
     } catch (e) {
         console.error("AI Error:", e.toString())
@@ -65,9 +61,7 @@ app.post("/chat/:id/message", async (req, res) => {
     }
 })
 
-app.get("/chats", (req, res) => {
-    res.json({ chats: Object.keys(chats) })
-})
+app.get("/chats", (req, res) => res.json({ chats: Object.keys(chats) }))
 
 app.get("/chat/:id/export", (req, res) => {
     const id = req.params.id
@@ -83,6 +77,7 @@ app.post("/chat/import", (req, res) => {
     res.json({ chatId: newId })
 })
 
+// Listen on Railway port or 8000 locally
 app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port", PORT)
 })
