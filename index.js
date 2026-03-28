@@ -149,7 +149,7 @@ const notificationSchema = new mongoose.Schema({
 })
 
 const healthPingSchema = new mongoose.Schema({
-  source: { type: String, default: 'internal' },
+  source: { type: String, default: 'external' },
   payload: { type: Object, default: {} },
   createdAt: { type: Date, default: Date.now }
 })
@@ -242,8 +242,7 @@ async function requireChannelMember(req, res, next) {
 }
 
 async function createNotification(userId, type, title, body, data = {}) {
-  const notification = await Notification.create({ userId, type, title, body, data })
-  return notification
+  return Notification.create({ userId, type, title, body, data })
 }
 
 async function isFriends(userA, userB) {
@@ -285,7 +284,7 @@ app.get('/health', asyncHandler(async (req, res) => {
 
 app.post('/health', asyncHandler(async (req, res) => {
   const ping = await HealthPing.create({
-    source: 'internal',
+    source: 'request',
     payload: req.body || {}
   })
   res.json({
@@ -295,25 +294,6 @@ app.post('/health', asyncHandler(async (req, res) => {
     received: req.body || {}
   })
 }))
-
-function scheduleSelfPing() {
-  const delay = Math.floor(Math.random() * 30000) + 15000
-  setTimeout(async () => {
-    try {
-      const payload = {
-        nonce: crypto.randomBytes(6).toString('hex'),
-        timestamp: Date.now(),
-        value: Math.random()
-      }
-      await fetch(`http://127.0.0.1:${PORT}/health`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-    } catch {}
-    scheduleSelfPing()
-  }, delay)
-}
 
 app.post('/auth/register', asyncHandler(async (req, res) => {
   const username = normalizeText(req.body.username).toLowerCase()
@@ -917,7 +897,6 @@ app.use((err, req, res, next) => {
 async function start() {
   try {
     await mongoose.connect(MONGODB_URL)
-    scheduleSelfPing()
     app.listen(PORT, () => {
       console.log(`API running on port ${PORT}`)
     })
