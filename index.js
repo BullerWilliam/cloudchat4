@@ -1287,17 +1287,17 @@ app.get(
 )
 
 /* ---------- SERVER SETTINGS ----------
-   These routes require a *verified* e‑mail address
+   Only the server owner can view and edit settings
 */
 app.get(
   '/servers/:serverId/settings',
   requireAuth,
   loadUser,
-  requireServerMember,
   asyncHandler(async (req, res) => {
-    const server = await Server.findById(req.params.serverId).select(
-      '-inviteCode' // keep the internal code private
-    )
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can view settings' })
     res.json({ settings: server })
   })
 )
