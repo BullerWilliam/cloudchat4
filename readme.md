@@ -1031,12 +1031,7 @@ Authorization: Bearer <token>
 ---
 
 #### GET /servers/:serverId
-Get detailed server information.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Get detailed server information. **No authentication required.**
 
 **Response (200 OK):**
 ```json
@@ -1066,7 +1061,9 @@ Authorization: Bearer <token>
         "_id": "65a123...",
         "username": "johndoe",
         "displayName": "John Doe",
-        "imageUrl": ""
+        "imageUrl": "",
+        "status": "online",
+        "activity": null
       },
       "roleIds": ["65g901..."],
       "nick": "",
@@ -1087,6 +1084,41 @@ Authorization: Bearer <token>
       "mentionable": false,
       "createdAt": "2024-01-15T12:00:00.000Z"
     }
+  ],
+  "categories": [
+    {
+      "_id": "65h234...",
+      "serverId": "65e345...",
+      "name": "General",
+      "position": 0,
+      "createdAt": "2024-01-15T12:00:00.000Z"
+    }
+  ],
+  "channels": [
+    {
+      "_id": "65i567...",
+      "serverId": "65e345...",
+      "categoryId": "65h234...",
+      "name": "general",
+      "type": "text",
+      "topic": "",
+      "position": 0,
+      "permissionOverwrites": [],
+      "allowedRoleIds": [],
+      "deniedRoleIds": [],
+      "createdAt": "2024-01-15T12:00:00.000Z"
+    }
+  ],
+  "emojis": []
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "Server not found"
+}
+```
   ],
   "categories": [
     {
