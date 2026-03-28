@@ -21,7 +21,7 @@ const io = new IOServer(server, {
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret'
 const MONGODB_PASSWORD = process.env.MONGODB_PASSWORD || ''
-const MONGODB_URI = process.env.MONGODB_URL
+const MONGODB_URL = process.env.MONGODB_URL || `mongodb+srv://mongo:${encodeURIComponent(MONGODB_PASSWORD)}@cloudchat4.aoxoo9t.mongodb.net/?appName=cloudchat4`
 
 app.use(helmet())
 app.use(cors({ origin: '*', credentials: true }))
@@ -918,10 +918,7 @@ io.on('connection', async socket => {
 
 async function start() {
   try {
-    if (!MONGODB_URI) {
-      throw new Error('Missing MongoDB connection string. Set MONGODB_URI or MONGO_URL from your Railway Mongo service.')
-    }
-    await mongoose.connect(MONGODB_URI)
+    await mongoose.connect(MONGODB_URL)
     server.listen(PORT, () => {
       console.log(`API running on port ${PORT}`)
     })
