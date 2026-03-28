@@ -1,7 +1,7 @@
 import express from "express"
 import { v4 as uuidv4 } from "uuid"
 import cors from "cors"
-import HuggingFace from "@huggingface/js-client"
+import { HfInference } from "@huggingface/inference"
 
 const app = express()
 app.use(express.json())
@@ -10,7 +10,7 @@ app.use(cors())
 const PORT = process.env.PORT || 8000
 const HF_TOKEN = process.env.HF_TOKEN || "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"
 
-const hf = new HuggingFace(HF_TOKEN)
+const hf = new HfInference(HF_TOKEN)
 
 let chats = {}
 
@@ -47,7 +47,7 @@ app.post("/chat/:id/message", async (req, res) => {
     chats[id].push({ role: "user", content: message })
 
     try {
-        const response = await hf.chat.completions.create({
+        const response = await hf.chat({
             model: "meta-llama/Meta-Llama-3-8B-Instruct",
             messages: chats[id],
             max_tokens: 120,
@@ -60,7 +60,7 @@ app.post("/chat/:id/message", async (req, res) => {
 
         res.json({ reply })
     } catch (e) {
-        console.error("AI Error:", e)
+        console.error("AI Error:", e.toString())
         res.status(500).json({ error: "ai error" })
     }
 })
