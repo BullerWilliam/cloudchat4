@@ -114,6 +114,26 @@ app.get("/fortune", (req, res) => {
     res.json({ message: getRandomItem(fortunes) })
 })
 
+app.get('/echo', (req, res) => {
+  let text = req.query.text; // Get the text from the query parameters
+
+  if (!text) {
+    return res.status(400).send('Please provide a text parameter. Example: /echo?text=hello');
+  }
+
+  res.send(`You said: "${text}"`);
+});
+
+app.get('/echo/hello', (req, res) => {
+  let text = req.query.text; // Get the text from the query parameters
+
+  if (!text) {
+    return res.status(400).send('Please provide a text parameter. Example: /echo/hello?text=hello');
+  }
+
+  res.send(`You said: "${text}"`);
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
 })
