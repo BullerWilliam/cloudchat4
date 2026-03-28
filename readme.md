@@ -1158,7 +1158,7 @@ Get detailed server information. **No authentication required.**
 ---
 
 #### GET /servers/:serverId/settings
-Get server settings.
+Get server settings. **Only the server owner can view settings.**
 
 **Headers:**
 ```
@@ -1182,8 +1182,23 @@ Authorization: Bearer <token>
     "defaultMessageNotifications": "ALL",
     "afkChannelId": null,
     "systemChannelId": null,
+    "inviteCode": "a1b2c3d4...",
     "createdAt": "2024-01-15T12:00:00.000Z"
   }
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Only the server owner can view settings"
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "Server not found"
 }
 ```
 
