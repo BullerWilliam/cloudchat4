@@ -948,8 +948,6 @@ app.get(
 /* ---------- GET USER ID BY USERNAME ---------- */
 app.post(
   '/users/getid',
-  requireAuth,
-  loadUser,
   asyncHandler(async (req, res) => {
     const username = normalizeText(req.body.username).toLowerCase()
     if (!username) return res.status(400).json({ error: 'username is required' })

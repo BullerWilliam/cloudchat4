@@ -610,11 +610,10 @@ Content-Type: application/json
 ---
 
 #### POST /users/getid
-Get a user's ID by their username.
+Get a user's ID by their username. **No authentication required.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
