@@ -8,21 +8,13 @@ This API uses JWT (JSON Web Tokens) for authentication.
 
 JWT_SECRET is a private secret key used by the server to sign and verify authentication tokens.
 
-When a user logs in or registers, the server creates a token using this secret. Every protected request must include this token.
-
-Example header:
-
-Authorization: Bearer YOUR_TOKEN
-
 ---
 
-## Base Features
+## Authentication Usage
 
-- User accounts
-- Friend system
-- Direct messages
-- Notifications
-- Real-time events (Socket.IO)
+All protected endpoints require this header:
+
+Authorization: Bearer YOUR_TOKEN
 
 ---
 
@@ -40,7 +32,7 @@ Body:
 
 Response:
 {
-  "token": "..."
+  "token": "jwt_token_here"
 }
 
 ---
@@ -56,7 +48,7 @@ Body:
 
 Response:
 {
-  "token": "..."
+  "token": "jwt_token_here"
 }
 
 ---
@@ -66,6 +58,19 @@ Response:
 ### Get Current User
 GET /me
 
+Headers:
+Authorization: Bearer YOUR_TOKEN
+
+Response:
+{
+  "_id": "userId",
+  "username": "user",
+  "displayName": "user",
+  "email": "mail",
+  "imageUrl": null,
+  "friends": []
+}
+
 ---
 
 ## Friends
@@ -73,9 +78,20 @@ GET /me
 ### Send Friend Request
 POST /friends/request
 
+Headers:
+Authorization: Bearer YOUR_TOKEN
+
 Body:
 {
   "to": "userId"
+}
+
+Response:
+{
+  "_id": "requestId",
+  "from": "yourId",
+  "to": "userId",
+  "status": "pending"
 }
 
 ---
@@ -83,10 +99,19 @@ Body:
 ### Respond to Request
 POST /friends/respond
 
+Headers:
+Authorization: Bearer YOUR_TOKEN
+
 Body:
 {
   "id": "requestId",
   "accept": true
+}
+
+Response:
+{
+  "_id": "requestId",
+  "status": "accepted"
 }
 
 ---
@@ -96,16 +121,42 @@ Body:
 ### Send Message
 POST /messages
 
+Headers:
+Authorization: Bearer YOUR_TOKEN
+
 Body:
 {
   "to": "userId",
   "content": "hello"
 }
 
+Response:
+{
+  "_id": "messageId",
+  "from": "yourId",
+  "to": "userId",
+  "content": "hello",
+  "createdAt": "timestamp"
+}
+
 ---
 
 ### Get Messages
 GET /messages/:id
+
+Headers:
+Authorization: Bearer YOUR_TOKEN
+
+Response:
+[
+  {
+    "_id": "messageId",
+    "from": "userId",
+    "to": "yourId",
+    "content": "hello",
+    "createdAt": "timestamp"
+  }
+]
 
 ---
 
@@ -115,7 +166,3 @@ GET /messages/:id
 - IDs are MongoDB ObjectIds
 - This API uses only REST (GET, POST, PATCH, DELETE)
 - No WebSocket or real-time connections are used
-
-- All protected routes require JWT
-- IDs are MongoDB ObjectIds
-- Real-time uses Socket.IO
