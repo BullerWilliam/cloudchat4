@@ -2610,10 +2610,64 @@ async function start() {
     console.log('✅ MongoDB connected')
     app.listen(PORT, () => {
       console.log(`🚀 API running on port ${PORT}`)
+      // Start self-ping to keep Render instance alive
+      startSelfPing()
     })
   } catch (e) {
     console.error('❌ MongoDB connection error:', e.message)
     process.exit(1)
   }
 }
+
+/* ---------- SELF-PING (keep Render alive) ----------
+   Sends random pings to /health at random intervals (30s–5min)
+   to prevent the free tier from spinning down.
+*/
+function startSelfPing() {
+  const BASE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`
+  
+  function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min
+  }
+  
+  function randomString(len) {
+    return crypto.randomBytes(len).toString('hex').slice(0, len)
+  }
+  
+  async function ping() {
+    try {
+      const payload = {
+        heartbeat: true,
+        timestamp: Date.now(),
+        nonce: randomString(8 + randomInt(0, 24)),
+        jitter: Math.random(),
+        slot: randomInt(1, 100),
+      }
+      
+      const res = await fetch(`${BASE_URL}/health`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      
+      if (!res.ok) {
+        console.log(`[SelfPing] HTTP ${res.status}`)
+      } else {
+        console.log(`[SelfPing] OK (next in ${delay}ms)`)
+      }
+    } catch (err) {
+      console.log(`[SelfPing] Error: ${err.message}`)
+    }
+    
+    // Schedule next ping: random delay between 30s and 5 minutes
+    const delay = randomInt(30000, 300000)
+    setTimeout(ping, delay)
+  }
+  
+  // Initial delay before first ping (5-15s)
+  const initialDelay = randomInt(5000, 15000)
+  console.log(`[SelfPing] Starting in ${initialDelay}ms, targeting ${BASE_URL}/health`)
+  setTimeout(ping, initialDelay)
+}
+
 start()
