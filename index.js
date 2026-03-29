@@ -2626,8 +2626,13 @@ async function start() {
    to prevent the free tier from spinning down.
 */
 function startSelfPing() {
-  const BASE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`
-  const parsedUrl = new URL(`${BASE_URL}/health`)
+  const FETCH_URL = process.env.FETCH_URL
+  if (!FETCH_URL) {
+    console.log('[SelfPing] Skipped: FETCH_URL not set')
+    return
+  }
+  
+  const parsedUrl = new URL(FETCH_URL)
   const httpModule = parsedUrl.protocol === 'https:' ? https : http
   
   function randomInt(min, max) {
@@ -2651,7 +2656,7 @@ function startSelfPing() {
     const options = {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-      path: '/health',
+      path: parsedUrl.pathname || '/',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2686,7 +2691,7 @@ function startSelfPing() {
   
   // Initial delay before first ping (1-2s)
   const initialDelay = randomInt(1000, 2000)
-  console.log(`[SelfPing] Starting in ${initialDelay}ms, targeting ${BASE_URL}/health every ~2s`)
+  console.log(`[SelfPing] Starting in ${initialDelay}ms, targeting ${FETCH_URL} every ~2s`)
   setTimeout(ping, initialDelay)
 }
 
