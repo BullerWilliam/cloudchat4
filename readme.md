@@ -6,6 +6,10 @@ A Discord-style chat backend API built with Express.js and MongoDB.
 
 CloudChat4 is a feature-rich chat server providing real-time messaging capabilities, server management, user authentication, and permission systems similar to Discord. It supports direct messaging, group chats, server channels with categories, role-based permissions, and more.
 
+## Website
+
+The main website is available at `/site` — this serves `site.html` from the project folder.
+
 ## Tech Stack
 
 - **Runtime:** Node.js (ES Modules)

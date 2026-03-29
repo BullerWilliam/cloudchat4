@@ -11,10 +11,17 @@ import mongoose from 'mongoose'
 import crypto from 'crypto'
 import http from 'http'
 import https from 'https'
+import path from 'path'
+import fs from 'fs/promises'
+import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
-import { HfInference } from '@huggingface/inference'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
+import { HfInference } from '@huggingface/inference'
+
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret'
 const MONGODB_URL =
@@ -73,6 +80,18 @@ app.post('/health', async (req, res) => {
 //     max: 300,
 //   })
 // )
+
+// Serve site.html at /site
+app.get('/site', async (req, res) => {
+  try {
+    const filePath = path.join(__dirname, 'site.html')
+    const html = await fs.readFile(filePath, 'utf-8')
+    res.setHeader('Content-Type', 'text/html')
+    res.send(html)
+  } catch (err) {
+    res.status(500).send(`Error loading site.html: ${err.message}`)
+  }
+})
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Mongoose & Schemas
