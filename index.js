@@ -9,6 +9,8 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 import crypto from 'crypto'
+import http from 'http'
+import https from 'https'
 import { v4 as uuidv4 } from 'uuid'
 import { HfInference } from '@huggingface/inference'
 
@@ -2625,6 +2627,8 @@ async function start() {
 */
 function startSelfPing() {
   const BASE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`
+  const parsedUrl = new URL(`${BASE_URL}/health`)
+  const httpModule = parsedUrl.protocol === 'https:' ? https : http
   
   function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min
@@ -2634,7 +2638,7 @@ function startSelfPing() {
     return crypto.randomBytes(len).toString('hex').slice(0, len)
   }
   
-  async function ping() {
+  function ping() {
     const payload = {
       heartbeat: true,
       timestamp: Date.now(),
@@ -2643,22 +2647,37 @@ function startSelfPing() {
       slot: randomInt(1, 100),
     }
     
-    try {
-      const res = await fetch(`${BASE_URL}/health`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      
-      if (!res.ok) {
-        console.log(`[SelfPing] HTTP ${res.status} at ${new Date().toISOString()}`)
-      } else {
-        const data = await res.json()
-        console.log(`[SelfPing] OK at ${new Date().toISOString()} — pingId: ${data.pingId || 'n/a'}`)
-      }
-    } catch (err) {
-      console.log(`[SelfPing] Error at ${new Date().toISOString()}: ${err.message}`)
+    const postData = JSON.stringify(payload)
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+      path: '/health',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+      },
     }
+    
+    const req = httpModule.request(options, (res) => {
+      let data = ''
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          console.log(`[SelfPing] OK at ${new Date().toISOString()} — pingId: ${json.pingId || 'n/a'}`)
+        } catch {
+          console.log(`[SelfPing] HTTP ${res.statusCode} at ${new Date().toISOString()}`)
+        }
+      })
+    })
+    
+    req.on('error', (err) => {
+      console.log(`[SelfPing] Error at ${new Date().toISOString()}: ${err.message}`)
+    })
+    
+    req.write(postData)
+    req.end()
     
     // Schedule next ping: ~2 seconds with small jitter (±200ms)
     const delay = 2000 + randomInt(-200, 200)
