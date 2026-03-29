@@ -66,13 +66,13 @@ app.post('/health', async (req, res) => {
   })
 })
 
-// Rate limiter AFTER health routes
-app.use(
-  rateLimit({
-    windowMs: 60 * 1000,
-    max: 300,
-  })
-)
+// Rate limiter disabled - no rate limits on any endpoints
+// app.use(
+//   rateLimit({
+//     windowMs: 60 * 1000,
+//     max: 300,
+//   })
+// )
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Mongoose & Schemas
