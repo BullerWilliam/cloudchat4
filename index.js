@@ -1589,6 +1589,16 @@ app.post(
 /* ---------- ROLES ----------
    Owner (or a user with MANAGE_ROLES) can create/update/delete.
 */
+app.get(
+  '/servers/:serverId/roles',
+  asyncHandler(async (req, res) => {
+    const roles = await Role.find({ serverId: req.params.serverId }).sort({
+      position: 1,
+    })
+    res.json({ roles })
+  })
+)
+
 app.post(
   '/servers/:serverId/roles',
   requireAuth,

@@ -1482,6 +1482,41 @@ Content-Type: application/json
 
 ### Roles
 
+#### GET /servers/:serverId/roles
+Get all roles for a server. **No authentication required.**
+
+**Response (200 OK):**
+```json
+{
+  "roles": [
+    {
+      "_id": "65g901...",
+      "serverId": "65e345...",
+      "name": "@everyone",
+      "color": "#99aab5",
+      "permissions": ["VIEW_CHANNEL", "SEND_MESSAGES", "READ_MESSAGE_HISTORY", "CONNECT_VOICE"],
+      "position": 0,
+      "hoist": false,
+      "mentionable": false,
+      "createdAt": "2024-01-15T12:00:00.000Z"
+    },
+    {
+      "_id": "65m789...",
+      "serverId": "65e345...",
+      "name": "Moderator",
+      "color": "#ff0000",
+      "permissions": ["MANAGE_MESSAGES", "KICK_MEMBERS"],
+      "position": 1,
+      "hoist": true,
+      "mentionable": true,
+      "createdAt": "2024-01-15T12:30:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
 #### POST /servers/:serverId/roles
 Create a new role. Requires `MANAGE_ROLES` permission.
 
