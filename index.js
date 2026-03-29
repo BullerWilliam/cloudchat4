@@ -473,7 +473,7 @@ const AuditLog = mongoose.model('AuditLog', auditLogSchema)
 const AiChat = mongoose.model('AiChat', aiChatSchema)
 
 // ── AI Chat config ─────────────────────────────────────────────────────────
-const HF_TOKEN = process.env.HF_TOKEN || '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'
+const HF_TOKEN = process.env.HF_TOKEN || ''
 const hf = new HfInference(HF_TOKEN)
 
 // ──────────────────────────────────────────────────────────────────────────────
