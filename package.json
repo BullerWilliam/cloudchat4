@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node index.js & node ai.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "@huggingface/inference": "^2.8.0",

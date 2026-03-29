@@ -9,6 +9,8 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 import crypto from 'crypto'
+import { v4 as uuidv4 } from 'uuid'
+import { HfInference } from '@huggingface/inference'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -430,6 +432,25 @@ const auditLogSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 })
 
+// ---------- AI CHAT SESSION ----------
+const aiChatSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  title: { type: String, default: 'New Chat' },
+  messages: [
+    {
+      role: { type: String, enum: ['user', 'assistant'], required: true },
+      content: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+    },
+  ],
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+})
+
 // ==================== Model registration =====================
 const User = mongoose.model('User', userSchema)
 const FriendRequest = mongoose.model('FriendRequest', friendRequestSchema)
@@ -449,6 +470,11 @@ const PasswordReset = mongoose.model('PasswordReset', passwordResetSchema)
 const Block = mongoose.model('Block', blockSchema)
 const Emoji = mongoose.model('Emoji', emojiSchema)
 const AuditLog = mongoose.model('AuditLog', auditLogSchema)
+const AiChat = mongoose.model('AiChat', aiChatSchema)
+
+// ── AI Chat config ─────────────────────────────────────────────────────────
+const HF_TOKEN = process.env.HF_TOKEN || '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'
+const hf = new HfInference(HF_TOKEN)
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Helper Functions (utility, middleware, permission checks)
@@ -2369,6 +2395,167 @@ app.patch(
 )
 
 /* ---------- HEALTH (already defined above) ---------- */
+
+/* ---------- AI CHAT ----------
+   User-specific AI chat sessions with persistent history.
+*/
+
+// Create a new AI chat session
+app.post(
+  '/ai/chats',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const chat = await AiChat.create({
+      userId: req.user._id,
+      title: normalizeText(req.body.title) || 'New Chat',
+      messages: [],
+    })
+    res.status(201).json({ chat })
+  })
+)
+
+// Get all AI chat sessions for the user
+app.get(
+  '/ai/chats',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const chats = await AiChat.find({ userId: req.user._id })
+      .select('_id title createdAt updatedAt')
+      .sort({ updatedAt: -1 })
+    res.json({ chats })
+  })
+)
+
+// Get a specific AI chat session with full message history
+app.get(
+  '/ai/chats/:chatId',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const chat = await AiChat.findOne({
+      _id: req.params.chatId,
+      userId: req.user._id,
+    })
+    if (!chat) return res.status(404).json({ error: 'Chat not found' })
+    res.json({ chat })
+  })
+)
+
+// Delete an AI chat session
+app.delete(
+  '/ai/chats/:chatId',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const result = await AiChat.deleteOne({
+      _id: req.params.chatId,
+      userId: req.user._id,
+    })
+    if (result.deletedCount === 0)
+      return res.status(404).json({ error: 'Chat not found' })
+    res.json({ ok: true })
+  })
+)
+
+// Send a message to AI and get a response
+app.post(
+  '/ai/chats/:chatId/messages',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const { message, data } = req.body
+    if (!message) return res.status(400).json({ error: 'message is required' })
+
+    const chat = await AiChat.findOne({
+      _id: req.params.chatId,
+      userId: req.user._id,
+    })
+    if (!chat) return res.status(404).json({ error: 'Chat not found' })
+
+    // Build the user message content
+    let userContent = message
+    
+    // If data is provided, append it as a JSON block
+    if (data && typeof data === 'object') {
+      const dataJson = JSON.stringify(data, null, 2)
+      userContent += `\n\n[Realtime Data]:\n\`\`\`json\n${dataJson}\n\`\`\``
+    }
+
+    // Add user message
+    chat.messages.push({ role: 'user', content: userContent })
+
+    // Prepare messages for AI (limit to last 20 for context)
+    const aiMessages = chat.messages.slice(-20).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }))
+
+    try {
+      const response = await hf.chat({
+        model: 'meta-llama/Meta-Llama-3-8B-Instruct',
+        messages: aiMessages,
+        max_tokens: 120,
+        temperature: 0.7,
+      })
+
+      const reply = response.choices[0].message.content
+      chat.messages.push({ role: 'assistant', content: reply })
+      chat.updatedAt = new Date()
+      await chat.save()
+
+      res.json({ reply, messageCount: chat.messages.length })
+    } catch (e) {
+      console.error('AI Error:', e.toString())
+      res.status(500).json({ error: 'AI error' })
+    }
+  })
+)
+
+// Export a chat
+app.get(
+  '/ai/chats/:chatId/export',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const chat = await AiChat.findOne({
+      _id: req.params.chatId,
+      userId: req.user._id,
+    })
+    if (!chat) return res.status(404).json({ error: 'Chat not found' })
+    res.json({
+      chatId: chat._id,
+      title: chat.title,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      messages: chat.messages,
+    })
+  })
+)
+
+// Import a chat
+app.post(
+  '/ai/chats/import',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const { title, messages } = req.body
+    if (!Array.isArray(messages))
+      return res.status(400).json({ error: 'messages array required' })
+
+    const chat = await AiChat.create({
+      userId: req.user._id,
+      title: normalizeText(title) || 'Imported Chat',
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt || new Date(),
+      })),
+    })
+    res.status(201).json({ chat })
+  })
+)
 
 /* ---------- ADMIN CLEAR‑DB ----------
    unchanged – still requires ADMIN_AUTH key.

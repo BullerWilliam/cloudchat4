@@ -2308,6 +2308,286 @@ Authorization: Bearer <token>
 
 ---
 
+### AI Chat
+
+User-specific AI chat sessions with persistent history using Hugging Face's Meta-Llama-3-8B-Instruct model.
+
+#### POST /ai/chats
+Create a new AI chat session.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "title": "My AI Chat"
+}
+```
+
+**Fields:**
+- `title` - Chat title (optional, defaults to "New Chat")
+
+**Response (201 Created):**
+```json
+{
+  "chat": {
+    "_id": "65v456...",
+    "userId": "65a123...",
+    "title": "My AI Chat",
+    "messages": [],
+    "createdAt": "2024-01-15T15:00:00.000Z",
+    "updatedAt": "2024-01-15T15:00:00.000Z"
+  }
+}
+```
+
+---
+
+#### GET /ai/chats
+Get all AI chat sessions for the authenticated user.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "chats": [
+    {
+      "_id": "65v456...",
+      "title": "My AI Chat",
+      "createdAt": "2024-01-15T15:00:00.000Z",
+      "updatedAt": "2024-01-15T15:30:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET /ai/chats/:chatId
+Get a specific chat session with full message history.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "chat": {
+    "_id": "65v456...",
+    "userId": "65a123...",
+    "title": "My AI Chat",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello, how are you?",
+        "createdAt": "2024-01-15T15:00:00.000Z"
+      },
+      {
+        "role": "assistant",
+        "content": "I'm doing well, thank you! How can I help you today?",
+        "createdAt": "2024-01-15T15:00:05.000Z"
+      }
+    ],
+    "createdAt": "2024-01-15T15:00:00.000Z",
+    "updatedAt": "2024-01-15T15:30:00.000Z"
+  }
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "Chat not found"
+}
+```
+
+---
+
+#### DELETE /ai/chats/:chatId
+Delete an AI chat session.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "Chat not found"
+}
+```
+
+---
+
+#### POST /ai/chats/:chatId/messages
+Send a message to the AI and get a response. The AI receives the last 20 messages for context. Optional realtime data can be included.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "message": "What's the weather like?",
+  "data": {
+    "location": "Copenhagen",
+    "temperature": 18,
+    "humidity": 65,
+    "windSpeed": 12
+  }
+}
+```
+
+**Fields:**
+- `message` - User message text (required)
+- `data` - JSON object with realtime data for the AI to see (optional)
+
+**How data is formatted:**
+When `data` is provided, it's appended to your message in a JSON code block format:
+```
+Your message here
+
+[Realtime Data]:
+```json
+{"key": "value", ...}
+```
+```
+
+**Response (200 OK):**
+```json
+{
+  "reply": "I can see it's currently 18°C in Copenhagen with 65% humidity and 12 km/h winds. That's pleasant weather!",
+  "messageCount": 4
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "message is required"
+}
+```
+
+**Response (500 Internal Server Error):**
+```json
+{
+  "error": "AI error"
+}
+```
+
+---
+
+#### GET /ai/chats/:chatId/export
+Export a chat session to JSON format.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "chatId": "65v456...",
+  "title": "My AI Chat",
+  "createdAt": "2024-01-15T15:00:00.000Z",
+  "updatedAt": "2024-01-15T15:30:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello!",
+      "createdAt": "2024-01-15T15:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello! How can I assist you?",
+      "createdAt": "2024-01-15T15:00:05.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /ai/chats/import
+Import a chat session from JSON.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "title": "Imported Chat",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello!",
+      "createdAt": "2024-01-15T10:00:00.000Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Hi there!",
+      "createdAt": "2024-01-15T10:00:05.000Z"
+    }
+  ]
+}
+```
+
+**Fields:**
+- `title` - Chat title (optional)
+- `messages` - Array of message objects (required)
+  - `role` - `"user"` or `"assistant"`
+  - `content` - Message text
+  - `createdAt` - Timestamp (optional)
+
+**Response (201 Created):**
+```json
+{
+  "chat": {
+    "_id": "65w789...",
+    "userId": "65a123...",
+    "title": "Imported Chat",
+    "messages": [...],
+    "createdAt": "2024-01-15T16:00:00.000Z",
+    "updatedAt": "2024-01-15T16:00:00.000Z"
+  }
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "messages array required"
+}
+```
+
+---
+
 ## Permission System
 
 Available permissions:
