@@ -2635,15 +2635,15 @@ function startSelfPing() {
   }
   
   async function ping() {
+    const payload = {
+      heartbeat: true,
+      timestamp: Date.now(),
+      nonce: randomString(8 + randomInt(0, 24)),
+      jitter: Math.random(),
+      slot: randomInt(1, 100),
+    }
+    
     try {
-      const payload = {
-        heartbeat: true,
-        timestamp: Date.now(),
-        nonce: randomString(8 + randomInt(0, 24)),
-        jitter: Math.random(),
-        slot: randomInt(1, 100),
-      }
-      
       const res = await fetch(`${BASE_URL}/health`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2651,22 +2651,23 @@ function startSelfPing() {
       })
       
       if (!res.ok) {
-        console.log(`[SelfPing] HTTP ${res.status}`)
+        console.log(`[SelfPing] HTTP ${res.status} at ${new Date().toISOString()}`)
       } else {
-        console.log(`[SelfPing] OK (next in ${delay}ms)`)
+        const data = await res.json()
+        console.log(`[SelfPing] OK at ${new Date().toISOString()} — pingId: ${data.pingId || 'n/a'}`)
       }
     } catch (err) {
-      console.log(`[SelfPing] Error: ${err.message}`)
+      console.log(`[SelfPing] Error at ${new Date().toISOString()}: ${err.message}`)
     }
     
-    // Schedule next ping: random delay between 30s and 5 minutes
-    const delay = randomInt(30000, 300000)
+    // Schedule next ping: ~2 seconds with small jitter (±200ms)
+    const delay = 2000 + randomInt(-200, 200)
     setTimeout(ping, delay)
   }
   
-  // Initial delay before first ping (5-15s)
-  const initialDelay = randomInt(5000, 15000)
-  console.log(`[SelfPing] Starting in ${initialDelay}ms, targeting ${BASE_URL}/health`)
+  // Initial delay before first ping (1-2s)
+  const initialDelay = randomInt(1000, 2000)
+  console.log(`[SelfPing] Starting in ${initialDelay}ms, targeting ${BASE_URL}/health every ~2s`)
   setTimeout(ping, initialDelay)
 }
 
