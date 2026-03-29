@@ -12,7 +12,7 @@ import crypto from 'crypto'
 import http from 'http'
 import https from 'https'
 import { v4 as uuidv4 } from 'uuid'
-import { HfInference } from '@huggingface/inference'
+import { InferenceClient } from '@huggingface/inference'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -476,7 +476,7 @@ const AiChat = mongoose.model('AiChat', aiChatSchema)
 
 // ── AI Chat config ─────────────────────────────────────────────────────────
 const HF_TOKEN = process.env.HF_TOKEN || ''
-const hf = new HfInference(HF_TOKEN)
+const hf = new InferenceClient(HF_TOKEN)
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Helper Functions (utility, middleware, permission checks)
