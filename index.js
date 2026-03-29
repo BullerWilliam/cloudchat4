@@ -31,6 +31,42 @@ app.use(helmet())
 app.use(cors({ origin: '*', credentials: true }))
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
+
+// Health routes BEFORE rate limiter (no rate limits)
+app.get('/health', async (req, res) => {
+  const ping = await HealthPing.create({
+    source: 'request',
+    payload: {
+      ip:
+        req.headers['x-forwarded-for'] ||
+        req.socket.remoteAddress ||
+        '',
+      query: req.query,
+      time: new Date().toISOString(),
+    },
+  })
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString(),
+    pingId: ping._id,
+    random: Math.random(),
+  })
+})
+
+app.post('/health', async (req, res) => {
+  const ping = await HealthPing.create({
+    source: 'request',
+    payload: req.body || {},
+  })
+  res.json({
+    status: 'ok',
+    stored: true,
+    pingId: ping._id,
+    received: req.body || {},
+  })
+})
+
+// Rate limiter AFTER health routes
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -658,44 +694,7 @@ async function requireChannelMember(req, res, next) {
 // ──────────────────────────────────────────────────────────────────────────────
 //  Existing Routes (unchanged – copied from your original file)
 // ──────────────────────────────────────────────────────────────────────────────
-app.get(
-  '/health',
-  asyncHandler(async (req, res) => {
-    const ping = await HealthPing.create({
-      source: 'request',
-      payload: {
-        ip:
-          req.headers['x-forwarded-for'] ||
-          req.socket.remoteAddress ||
-          '',
-        query: req.query,
-        time: new Date().toISOString(),
-      },
-    })
-    res.json({
-      status: 'ok',
-      time: new Date().toISOString(),
-      pingId: ping._id,
-      random: Math.random(),
-    })
-  })
-)
-
-app.post(
-  '/health',
-  asyncHandler(async (req, res) => {
-    const ping = await HealthPing.create({
-      source: 'request',
-      payload: req.body || {},
-    })
-    res.json({
-      status: 'ok',
-      stored: true,
-      pingId: ping._id,
-      received: req.body || {},
-    })
-  })
-)
+// NOTE: /health routes are defined before the rate limiter at the top of the file
 
 // ── AUTH ───────────────────────────────────────────────────────────────────
 app.post(
