@@ -12,7 +12,7 @@ import crypto from 'crypto'
 import http from 'http'
 import https from 'https'
 import { v4 as uuidv4 } from 'uuid'
-import { InferenceClient } from '@huggingface/inference'
+import InferenceClient from '@huggingface/inference'
 
 const app = express()
 const PORT = process.env.PORT || 3000
