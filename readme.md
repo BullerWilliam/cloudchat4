@@ -158,6 +158,9 @@ Content-Type: application/json
     "bio": "",
     "status": "offline",
     "activity": null,
+    "currency": 0,
+    "selectedAvatarDecoration": null,
+    "selectedNameTag": null,
     "createdAt": "2024-01-15T10:30:00.000Z",
     "lastSeenAt": "2024-01-15T10:30:00.000Z"
   }
@@ -212,6 +215,9 @@ Content-Type: application/json
     "bio": "",
     "status": "offline",
     "activity": null,
+    "currency": 0,
+    "selectedAvatarDecoration": null,
+    "selectedNameTag": null,
     "createdAt": "2024-01-15T10:00:00.000Z",
     "lastSeenAt": "2024-01-15T10:30:00.000Z"
   }
@@ -246,6 +252,19 @@ Authorization: Bearer <token>
     "bio": "Software developer",
     "status": "online",
     "activity": { "name": "Coding", "type": "PLAYING" },
+    "currency": 3500,
+    "selectedAvatarDecoration": {
+      "id": "65shop1...",
+      "name": "Golden Crown",
+      "imageUrl": "https://example.com/crown.png",
+      "type": "avatar_decoration"
+    },
+    "selectedNameTag": {
+      "id": "65shop2...",
+      "name": "Ruby Tag",
+      "imageUrl": "https://example.com/nametag.png",
+      "type": "name_tag"
+    },
     "createdAt": "2024-01-15T10:00:00.000Z",
     "lastSeenAt": "2024-01-15T10:30:00.000Z"
   }
@@ -402,10 +421,23 @@ Get a specific user's public profile. **No authentication required.**
     "id": "65a123...",
     "displayName": "John Doe",
     "email": "john@example.com",
-    "imageUrl": "",
-    "bio": "",
+    "imageUrl": "https://example.com/avatar.jpg",
+    "bio": "Software developer",
     "status": "online",
-    "activity": null,
+    "activity": { "name": "Coding", "type": "PLAYING" },
+    "currency": 3500,
+    "selectedAvatarDecoration": {
+      "id": "65shop1...",
+      "name": "Golden Crown",
+      "imageUrl": "https://example.com/crown.png",
+      "type": "avatar_decoration"
+    },
+    "selectedNameTag": {
+      "id": "65shop2...",
+      "name": "Ruby Tag",
+      "imageUrl": "https://example.com/nametag.png",
+      "type": "name_tag"
+    },
     "createdAt": "2024-01-15T10:00:00.000Z",
     "lastSeenAt": "2024-01-15T10:30:00.000Z"
   }
