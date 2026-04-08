@@ -73,13 +73,18 @@ app.post('/health', async (req, res) => {
   })
 })
 
-// Rate limiter disabled - no rate limits on any endpoints
-// app.use(
-//   rateLimit({
-//     windowMs: 60 * 1000,
-//     max: 300,
-//   })
-// )
+// Rate limiter config
+const messageRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 messages per minute
+  message: { error: 'Too many messages sent. Slow down!' },
+})
+
+const registerRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 accounts per hour
+  message: { error: 'Too many accounts created. Try again later.' },
+})
 
 // Serve site.html at /site
 app.get('/site', async (req, res) => {
@@ -107,9 +112,8 @@ const shopItemSchema = new mongoose.Schema({
     enum: ['avatar_decoration', 'name_tag'],
     required: true,
   },
-  imageUrl: { type: String, default: '' },
+  imageUrl: { type: String, required: true }, // Image for both decorations and name tags
   price: { type: Number, required: true, min: 0 },
-  color: { type: String, default: '' }, // For name_tag color
   createdAt: { type: Date, default: Date.now },
 })
 
@@ -665,7 +669,6 @@ async function sanitizeUserWithShopItems(user) {
         id: item._id.toString(),
         name: item.name,
         imageUrl: item.imageUrl,
-        color: item.color,
         type: item.type,
       }
     }
@@ -853,6 +856,7 @@ async function requireChannelMember(req, res, next) {
 // ── AUTH ───────────────────────────────────────────────────────────────────
 app.post(
   '/auth/register',
+  registerRateLimit,
   asyncHandler(async (req, res) => {
     const email = normalizeText(req.body.email).toLowerCase()
     const password = normalizeText(req.body.password)
@@ -2712,6 +2716,7 @@ app.post(
   requireAuth,
   loadUser,
   requireChannelMember,
+  messageRateLimit,
   asyncHandler(async (req, res) => {
     const content = normalizeText(req.body.content)
     if (!content) return res.status(400).json({ error: 'content is required' })
@@ -3157,7 +3162,12 @@ app.post(
     req.user.selectedAvatarDecoration = itemId
     await req.user.save()
 
-    res.json({ ok: true, selectedAvatarDecoration: itemId })
+    res.json({ ok: true, selectedAvatarDecoration: {
+      id: item._id.toString(),
+      name: item.name,
+      imageUrl: item.imageUrl,
+      type: item.type,
+    }})
   })
 )
 
@@ -3197,7 +3207,12 @@ app.post(
     req.user.selectedNameTag = itemId
     await req.user.save()
 
-    res.json({ ok: true, selectedNameTag: itemId })
+    res.json({ ok: true, selectedNameTag: {
+      id: item._id.toString(),
+      name: item.name,
+      imageUrl: item.imageUrl,
+      type: item.type,
+    }})
   })
 )
 

@@ -1608,8 +1608,8 @@ Content-Type: application/json
 A platform-wide shop with items users can purchase using their currency. Only admins (with `ADMIN_AUTH` key) can manage shop items.
 
 Item types:
-- `avatar_decoration` - Profile avatar decoration
-- `name_tag` - Colored name tag with custom color
+- `avatar_decoration` - Profile avatar decoration image
+- `name_tag` - Name tag image
 
 #### GET /shop/items
 List all available shop items. **No authentication required.**
@@ -1629,11 +1629,10 @@ List all available shop items. **No authentication required.**
     },
     {
       "_id": "65shop2...",
-      "name": "Ruby Name",
-      "description": "Shiny red name tag",
+      "name": "Ruby Tag",
+      "description": "A shiny red name tag",
       "type": "name_tag",
-      "imageUrl": "",
-      "color": "#ff0000",
+      "imageUrl": "https://example.com/nametag.png",
       "price": 300,
       "createdAt": "2024-01-15T10:00:00.000Z"
   ]
