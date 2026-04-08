@@ -1393,6 +1393,217 @@ Authorization: Bearer <token>
 
 ---
 
+### Webhooks
+
+Server owners can create webhooks to post messages to channels. Webhooks have a name and optional avatar image, and use a token to authenticate message posts.
+
+#### POST /servers/:serverId/channels/:channelId/webhooks
+Create a webhook for a channel. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "name": "GitHub",
+  "imageUrl": "https://example.com/github-icon.png"
+}
+```
+
+**Required Fields:**
+- `name` - Webhook display name
+
+**Optional Fields:**
+- `imageUrl` - Avatar image URL
+
+**Response (201 Created):**
+```json
+{
+  "webhook": {
+    "id": "65y123...",
+    "serverId": "65e345...",
+    "channelId": "65o345...",
+    "name": "GitHub",
+    "imageUrl": "https://example.com/github-icon.png",
+    "createdBy": "65a123...",
+    "createdAt": "2024-01-15T14:00:00.000Z"
+  },
+  "token": "a1b2c3d4e5f6..."
+}
+```
+
+**⚠️ Note:** The token is only returned once on creation. Store it securely!
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Only the server owner can create webhooks"
+}
+```
+
+---
+
+#### GET /servers/:serverId/channels/:channelId/webhooks
+Get all webhooks for a specific channel. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "webhooks": [
+    {
+      "id": "65y123...",
+      "serverId": "65e345...",
+      "channelId": "65o345...",
+      "name": "GitHub",
+      "imageUrl": "https://example.com/github-icon.png",
+      "createdBy": "65a123...",
+      "createdAt": "2024-01-15T14:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET /servers/:serverId/webhooks
+Get all webhooks for a server. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "webhooks": [
+    {
+      "id": "65y123...",
+      "serverId": "65e345...",
+      "channelId": "65o345...",
+      "channelName": "general",
+      "name": "GitHub",
+      "imageUrl": "https://example.com/github-icon.png",
+      "createdBy": "65a123...",
+      "createdAt": "2024-01-15T14:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### PATCH /servers/:serverId/webhooks/:webhookId
+Update a webhook's name or image. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "name": "GitHub Bot",
+  "imageUrl": "https://example.com/new-avatar.png"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "webhook": {
+    "id": "65y123...",
+    "serverId": "65e345...",
+    "channelId": "65o345...",
+    "name": "GitHub Bot",
+    "imageUrl": "https://example.com/new-avatar.png",
+    "createdBy": "65a123...",
+    "createdAt": "2024-01-15T14:00:00.000Z"
+  }
+}
+```
+
+---
+
+#### DELETE /servers/:serverId/webhooks/:webhookId
+Delete a webhook. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+#### POST /webhooks/:webhookId/:webhookToken
+Send a message using a webhook. **No authentication required** - just the webhook token.
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "content": "New commit pushed!",
+  "attachments": ["https://example.com/screenshot.png"]
+}
+```
+
+**Required Fields:**
+- `content` - Message text
+
+**Optional Fields:**
+- `attachments` - Array of attachment URLs
+
+**Response (201 Created):**
+```json
+{
+  "message": {
+    "id": "65z456...",
+    "kind": "server",
+    "serverId": "65e345...",
+    "channelId": "65o345...",
+    "content": "New commit pushed!",
+    "attachments": ["https://example.com/screenshot.png"],
+    "webhook": {
+      "id": "65y123...",
+      "name": "GitHub",
+      "imageUrl": "https://example.com/github-icon.png"
+    },
+    "createdAt": "2024-01-15T14:30:00.000Z"
+  }
+}
+```
+
+**Response (401 Unauthorized):**
+```json
+{
+  "error": "Invalid webhook token"
+}
+```
+
+---
+
 ### Server Invites
 
 #### POST /servers/:serverId/invites/custom

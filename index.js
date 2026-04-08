@@ -380,8 +380,16 @@ const messageSchema = new mongoose.Schema({
   senderId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    default: null, // null for webhook messages
   },
+  // Webhook-specific fields
+  webhookId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Webhook',
+    default: null,
+  },
+  webhookName: { type: String, default: '' },
+  webhookImageUrl: { type: String, default: '' },
   threadId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'DmThread',
@@ -498,6 +506,29 @@ const auditLogSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 })
 
+// ---------- WEBHOOK ----------
+const webhookSchema = new mongoose.Schema({
+  serverId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Server',
+    required: true,
+  },
+  channelId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Channel',
+    required: true,
+  },
+  name: { type: String, required: true, trim: true },
+  imageUrl: { type: String, default: '' },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  createdAt: { type: Date, default: Date.now },
+})
+webhookSchema.index({ serverId: 1, channelId: 1 })
+
 // ---------- AI CHAT SESSION ----------
 const aiChatSchema = new mongoose.Schema({
   userId: {
@@ -536,6 +567,7 @@ const PasswordReset = mongoose.model('PasswordReset', passwordResetSchema)
 const Block = mongoose.model('Block', blockSchema)
 const Emoji = mongoose.model('Emoji', emojiSchema)
 const AuditLog = mongoose.model('AuditLog', auditLogSchema)
+const Webhook = mongoose.model('Webhook', webhookSchema)
 const AiChat = mongoose.model('AiChat', aiChatSchema)
 
 // ── AI Chat config ─────────────────────────────────────────────────────────
@@ -1690,6 +1722,288 @@ app.delete(
     )
 
     res.json({ ok: true })
+  })
+)
+
+/* ---------- WEBHOOKS ----------
+   Server owner can create webhooks for channels.
+   Webhooks can post messages using a webhook token.
+*/
+
+// Create webhook (owner only)
+app.post(
+  '/servers/:serverId/channels/:channelId/webhooks',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const { name, imageUrl } = req.body
+    if (!name) return res.status(400).json({ error: 'name is required' })
+
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    // Only owner can create webhooks
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can create webhooks' })
+
+    // Verify channel exists and belongs to server
+    const channel = await Channel.findOne({
+      _id: req.params.channelId,
+      serverId: req.params.serverId,
+    })
+    if (!channel) return res.status(404).json({ error: 'Channel not found' })
+
+    // Generate webhook token
+    const webhookToken = crypto.randomBytes(32).toString('hex')
+
+    const webhook = await Webhook.create({
+      serverId: req.params.serverId,
+      channelId: req.params.channelId,
+      name: normalizeText(name),
+      imageUrl: normalizeText(imageUrl) || '',
+      createdBy: req.user._id,
+    })
+
+    // Store token separately (not returned in list responses)
+    await mongoose.connection.collection('webhook_tokens').insertOne({
+      webhookId: webhook._id,
+      token: webhookToken,
+      createdAt: new Date(),
+    })
+
+    await createAuditLog(
+      server._id,
+      'WEBHOOK_CREATE',
+      req.user._id,
+      webhook._id,
+      { name: webhook.name, channelId: webhook.channelId }
+    )
+
+    res.status(201).json({
+      webhook: {
+        id: webhook._id.toString(),
+        serverId: webhook.serverId.toString(),
+        channelId: webhook.channelId.toString(),
+        name: webhook.name,
+        imageUrl: webhook.imageUrl,
+        createdBy: webhook.createdBy.toString(),
+        createdAt: webhook.createdAt,
+      },
+      token: webhookToken, // Only returned on creation
+    })
+  })
+)
+
+// Get webhooks for a channel (owner only)
+app.get(
+  '/servers/:serverId/channels/:channelId/webhooks',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can view webhooks' })
+
+    const webhooks = await Webhook.find({
+      serverId: req.params.serverId,
+      channelId: req.params.channelId,
+    })
+
+    res.json({
+      webhooks: webhooks.map((w) => ({
+        id: w._id.toString(),
+        serverId: w.serverId.toString(),
+        channelId: w.channelId.toString(),
+        name: w.name,
+        imageUrl: w.imageUrl,
+        createdBy: w.createdBy.toString(),
+        createdAt: w.createdAt,
+      })),
+    })
+  })
+)
+
+// Get all webhooks for a server (owner only)
+app.get(
+  '/servers/:serverId/webhooks',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can view webhooks' })
+
+    const webhooks = await Webhook.find({
+      serverId: req.params.serverId,
+    }).populate('channelId', 'name')
+
+    res.json({
+      webhooks: webhooks.map((w) => ({
+        id: w._id.toString(),
+        serverId: w.serverId.toString(),
+        channelId: w.channelId._id ? w.channelId._id.toString() : w.channelId.toString(),
+        channelName: w.channelId.name || null,
+        name: w.name,
+        imageUrl: w.imageUrl,
+        createdBy: w.createdBy.toString(),
+        createdAt: w.createdAt,
+      })),
+    })
+  })
+)
+
+// Update webhook (owner only)
+app.patch(
+  '/servers/:serverId/webhooks/:webhookId',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can update webhooks' })
+
+    const webhook = await Webhook.findOne({
+      _id: req.params.webhookId,
+      serverId: req.params.serverId,
+    })
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' })
+
+    const fields = ['name', 'imageUrl']
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        webhook[field] = field === 'name' ? normalizeText(req.body[field]) : normalizeText(req.body[field])
+      }
+    }
+    await webhook.save()
+
+    await createAuditLog(
+      server._id,
+      'WEBHOOK_UPDATE',
+      req.user._id,
+      webhook._id,
+      { updatedFields: Object.keys(req.body) }
+    )
+
+    res.json({
+      webhook: {
+        id: webhook._id.toString(),
+        serverId: webhook.serverId.toString(),
+        channelId: webhook.channelId.toString(),
+        name: webhook.name,
+        imageUrl: webhook.imageUrl,
+        createdBy: webhook.createdBy.toString(),
+        createdAt: webhook.createdAt,
+      },
+    })
+  })
+)
+
+// Delete webhook (owner only)
+app.delete(
+  '/servers/:serverId/webhooks/:webhookId',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can delete webhooks' })
+
+    const webhook = await Webhook.findOne({
+      _id: req.params.webhookId,
+      serverId: req.params.serverId,
+    })
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' })
+
+    // Delete webhook and its token
+    await Webhook.deleteOne({ _id: webhook._id })
+    await mongoose.connection.collection('webhook_tokens').deleteOne({ webhookId: webhook._id })
+
+    await createAuditLog(
+      server._id,
+      'WEBHOOK_DELETE',
+      req.user._id,
+      webhook._id,
+      { name: webhook.name }
+    )
+
+    res.json({ ok: true })
+  })
+)
+
+// Execute webhook - POST message (no auth required, only token)
+app.post(
+  '/webhooks/:webhookId/:webhookToken',
+  asyncHandler(async (req, res) => {
+    const { webhookId, webhookToken } = req.params
+    const { content } = req.body
+
+    if (!content) return res.status(400).json({ error: 'content is required' })
+
+    // Verify webhook exists
+    const webhook = await Webhook.findById(webhookId)
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' })
+
+    // Verify token
+    const tokenDoc = await mongoose.connection.collection('webhook_tokens').findOne({
+      webhookId: webhook._id,
+      token: webhookToken,
+    })
+    if (!tokenDoc) return res.status(401).json({ error: 'Invalid webhook token' })
+
+    // Verify channel still exists
+    const channel = await Channel.findById(webhook.channelId)
+    if (!channel) return res.status(404).json({ error: 'Channel not found' })
+
+    // Create message
+    const message = await Message.create({
+      kind: 'server',
+      senderId: null, // Webhook messages have no sender
+      serverId: webhook.serverId,
+      channelId: webhook.channelId,
+      content: normalizeText(content),
+      attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
+      webhookId: webhook._id,
+      webhookName: webhook.name,
+      webhookImageUrl: webhook.imageUrl,
+    })
+
+    await createAuditLog(
+      webhook.serverId,
+      'WEBHOOK_MESSAGE',
+      webhook._id,
+      null,
+      { channelId: webhook.channelId, messageId: message._id }
+    )
+
+    res.status(201).json({
+      message: {
+        id: message._id.toString(),
+        kind: message.kind,
+        serverId: message.serverId.toString(),
+        channelId: message.channelId.toString(),
+        content: message.content,
+        attachments: message.attachments,
+        webhook: {
+          id: webhook._id.toString(),
+          name: webhook.name,
+          imageUrl: webhook.imageUrl,
+        },
+        createdAt: message.createdAt,
+      },
+    })
   })
 )
 
