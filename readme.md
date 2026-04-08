@@ -1604,6 +1604,299 @@ Content-Type: application/json
 
 ---
 
+### Shop & Currency
+A platform-wide shop with items users can purchase using their currency. Only admins (with `ADMIN_AUTH` key) can manage shop items.
+
+Item types:
+- `avatar_decoration` - Profile avatar decoration
+- `name_tag` - Colored name tag with custom color
+
+#### GET /shop/items
+List all available shop items. **No authentication required.**
+
+**Response (200 OK):**
+```json
+{
+  "items": [
+    {
+      "_id": "65shop1...",
+      "name": "Golden Crown",
+      "description": "A royal golden crown",
+      "type": "avatar_decoration",
+      "imageUrl": "https://example.com/crown.png",
+      "price": 500,
+      "createdAt": "2024-01-15T10:00:00.000Z"
+    },
+    {
+      "_id": "65shop2...",
+      "name": "Ruby Name",
+      "description": "Shiny red name tag",
+      "type": "name_tag",
+      "imageUrl": "",
+      "color": "#ff0000",
+      "price": 300,
+      "createdAt": "2024-01-15T10:00:00.000Z"
+  ]
+}
+```
+
+---
+
+#### POST /shop/items
+Create a shop item. **Admin only.**
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "key": "admin-auth-key",
+  "name": "Golden Crown",
+  "description": "A royal golden crown",
+  "type": "avatar_decoration",
+  "imageUrl": "https://example.com/crown.png",
+  "price": 500
+}
+```
+
+**Types:** `avatar_decoration`, `name_tag`
+
+**Response (201 Created):**
+```json
+{
+  "item": {
+    "_id": "65shop1...",
+    "name": "Golden Crown",
+    "description": "A royal golden crown",
+    "type": "avatar_decoration",
+    "imageUrl": "https://example.com/crown.png",
+    "price": 500,
+    "color": "",
+    "createdAt": "2024-01-15T10:00:00.000Z"
+  }
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Invalid admin key"
+}
+```
+
+---
+
+#### PATCH /shop/items/:itemId
+Update a shop item. **Admin only.**
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "key": "admin-auth-key",
+  "name": "Updated Name",
+  "price": 600
+}
+```
+
+---
+
+#### DELETE /shop/items/:itemId
+Delete a shop item. **Admin only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query:**
+- `key` - Admin auth key
+
+**Example:** `DELETE /shop/items/65shop1...?key=admin-auth-key`
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+---
+
+#### GET /users/:userId/inventory
+Get a user's purchased items. **Authenticated user only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "items": [
+    {
+      "id": "65inv1...",
+      "itemId": "65shop1...",
+      "name": "Golden Crown",
+      "description": "A royal golden crown",
+      "type": "avatar_decoration",
+      "imageUrl": "https://example.com/crown.png",
+      "color": "",
+      "price": 500,
+      "purchasedAt": "2024-01-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /shop/items/:itemId/buy
+Purchase an item with currency. **Authenticated user only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (201 Created):**
+```json
+{
+  "inventory": {
+    "id": "65inv1...",
+    "itemId": "65shop1...",
+    "purchasedAt": "2024-01-15T12:00:00.000Z"
+  },
+  "remainingCurrency": 3500
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "Insufficient currency"
+}
+```
+
+**Response (409 Conflict):**
+```json
+{
+  "error": "You already own this item"
+}
+```
+
+---
+
+#### POST /users/:userId/avatar-decoration
+Select/unequip an avatar decoration. **Authenticated user only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (equip):**
+```json
+{
+  "itemId": "65shop1..."
+}
+```
+
+**Body (unequip):**
+```json
+{
+  "itemId": null
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "selectedAvatarDecoration": "65shop1..."
+}
+```
+
+---
+
+#### POST /users/:userId/name-tag
+Select/unequip a name tag. **Authenticated user only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (equip):**
+```json
+{
+  "itemId": "65shop2..."
+}
+```
+
+**Body (unequip):**
+```json
+{
+  "itemId": null
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "selectedNameTag": "65shop2..."
+}
+```
+
+---
+
+**Updated User Objects:**
+
+`GET /auth/me` and `GET /users/:userId` now return additional fields:
+
+```json
+{
+  "user": {
+    "id": "65a123...",
+    "displayName": "John Doe",
+    "email": "john@example.com",
+    "imageUrl": "",
+    "bio": "",
+    "status": "online",
+    "activity": null,
+    "currency": 3500,
+    "selectedAvatarDecoration": {
+      "id": "65shop1...",
+      "name": "Golden Crown",
+      "imageUrl": "https://example.com/crown.png",
+      "type": "avatar_decoration"
+    },
+    "selectedNameTag": {
+      "id": "65shop2...",
+      "name": "Ruby Name",
+      "imageUrl": "",
+      "color": "#ff0000",
+      "type": "name_tag"
+    },
+    "createdAt": "2024-01-15T10:00:00.000Z",
+    "lastSeenAt": "2024-01-15T12:00:00.000Z"
+  }
+}
+```
+
+---
+
 ### Server Invites
 
 #### POST /servers/:serverId/invites/custom

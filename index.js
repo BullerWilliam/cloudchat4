@@ -98,6 +98,37 @@ app.get('/site', async (req, res) => {
 // ──────────────────────────────────────────────────────────────────────────────
 mongoose.set('strictQuery', true)
 
+// ---------- SHOP ITEM ----------
+const shopItemSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  description: { type: String, default: '' },
+  type: {
+    type: String,
+    enum: ['avatar_decoration', 'name_tag'],
+    required: true,
+  },
+  imageUrl: { type: String, default: '' },
+  price: { type: Number, required: true, min: 0 },
+  color: { type: String, default: '' }, // For name_tag color
+  createdAt: { type: Date, default: Date.now },
+})
+
+// ---------- USER INVENTORY ----------
+const userInventorySchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  itemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ShopItem',
+    required: true,
+  },
+  purchasedAt: { type: Date, default: Date.now },
+})
+userInventorySchema.index({ userId: 1, itemId: 1 }, { unique: true })
+
 // ---------- USER ----------
 const userSchema = new mongoose.Schema({
   displayName: { type: String, default: '', trim: true },
@@ -127,6 +158,18 @@ const userSchema = new mongoose.Schema({
     type: Map,
     of: Boolean,
     default: {},
+  },
+  // Currency & Shop
+  currency: { type: Number, default: 0, min: 0 },
+  selectedAvatarDecoration: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ShopItem',
+    default: null,
+  },
+  selectedNameTag: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ShopItem',
+    default: null,
   },
   createdAt: { type: Date, default: Date.now },
   lastSeenAt: { type: Date, default: Date.now },
@@ -549,6 +592,8 @@ const aiChatSchema = new mongoose.Schema({
 })
 
 // ==================== Model registration =====================
+const ShopItem = mongoose.model('ShopItem', shopItemSchema)
+const UserInventory = mongoose.model('UserInventory', userInventorySchema)
 const User = mongoose.model('User', userSchema)
 const FriendRequest = mongoose.model('FriendRequest', friendRequestSchema)
 const ServerOwnershipTransfer = mongoose.model('ServerOwnershipTransfer', serverOwnershipTransferSchema)
@@ -587,9 +632,46 @@ function sanitizeUser(user) {
     bio: user.bio,
     status: user.status,
     activity: user.activity,
+    // Shop & Currency
+    currency: user.currency || 0,
+    selectedAvatarDecoration: user.selectedAvatarDecoration?.toString() || null,
+    selectedNameTag: user.selectedNameTag?.toString() || null,
     createdAt: user.createdAt,
     lastSeenAt: user.lastSeenAt,
   }
+}
+
+async function sanitizeUserWithShopItems(user) {
+  const base = sanitizeUser(user)
+  if (!base) return null
+
+  // Populate selected items if they exist
+  if (user.selectedAvatarDecoration) {
+    const item = await ShopItem.findById(user.selectedAvatarDecoration)
+    if (item) {
+      base.selectedAvatarDecoration = {
+        id: item._id.toString(),
+        name: item.name,
+        imageUrl: item.imageUrl,
+        type: item.type,
+      }
+    }
+  }
+
+  if (user.selectedNameTag) {
+    const item = await ShopItem.findById(user.selectedNameTag)
+    if (item) {
+      base.selectedNameTag = {
+        id: item._id.toString(),
+        name: item.name,
+        imageUrl: item.imageUrl,
+        color: item.color,
+        type: item.type,
+      }
+    }
+  }
+
+  return base
 }
 
 function sanitizeBasicUser(user) {
@@ -824,7 +906,7 @@ app.post(
     user.lastSeenAt = new Date()
     await user.save()
 
-    res.json({ token: signToken(user), user: sanitizeUser(user) })
+    res.json({ token: signToken(user), user: await sanitizeUserWithShopItems(user) })
   })
 )
 
@@ -833,7 +915,7 @@ app.get(
   requireAuth,
   loadUser,
   asyncHandler(async (req, res) => {
-    res.json({ user: sanitizeUser(req.user) })
+    res.json({ user: await sanitizeUserWithShopItems(req.user) })
   })
 )
 
@@ -975,7 +1057,7 @@ app.get(
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.params.userId)
     if (!user) return res.status(404).json({ error: 'User not found' })
-    res.json({ user: sanitizeUser(user) })
+    res.json({ user: await sanitizeUserWithShopItems(user) })
   })
 )
 
@@ -2858,6 +2940,267 @@ app.delete(
   })
 )
 
+/* ---------- SHOP (Admin managed) ----------
+   Shop items can be created/deleted/edited with ADMIN_AUTH key.
+   Users have currency and can buy items to their inventory.
+*/
+
+// Get all shop items
+app.get(
+  '/shop/items',
+  asyncHandler(async (req, res) => {
+    const items = await ShopItem.find({}).sort({ createdAt: -1 })
+    res.json({ items })
+  })
+)
+
+// Create shop item (admin only)
+app.post(
+  '/shop/items',
+  asyncHandler(async (req, res) => {
+    const key = normalizeText(req.body.key)
+    if (key !== ADMIN_AUTH)
+      return res.status(403).json({ error: 'Invalid admin key' })
+
+    const { name, description, type, imageUrl, price, color } = req.body
+    if (!name || !type || price === undefined)
+      return res.status(400).json({ error: 'name, type and price are required' })
+
+    if (!['avatar_decoration', 'name_tag'].includes(type))
+      return res.status(400).json({ error: 'type must be avatar_decoration or name_tag' })
+
+    const item = await ShopItem.create({
+      name: normalizeText(name),
+      description: normalizeText(description) || '',
+      type,
+      imageUrl: normalizeText(imageUrl) || '',
+      price: Number(price),
+      color: normalizeText(color) || '',
+    })
+
+    res.status(201).json({ item })
+  })
+)
+
+// Update shop item (admin only)
+app.patch(
+  '/shop/items/:itemId',
+  asyncHandler(async (req, res) => {
+    const key = normalizeText(req.body.key)
+    if (key !== ADMIN_AUTH)
+      return res.status(403).json({ error: 'Invalid admin key' })
+
+    const item = await ShopItem.findById(req.params.itemId)
+    if (!item) return res.status(404).json({ error: 'Item not found' })
+
+    const fields = ['name', 'description', 'imageUrl', 'price', 'color']
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        if (field === 'price') {
+          item[field] = Number(req.body[field])
+        } else {
+          item[field] = normalizeText(req.body[field])
+        }
+      }
+    }
+    await item.save()
+
+    res.json({ item })
+  })
+)
+
+// Delete shop item (admin only)
+app.delete(
+  '/shop/items/:itemId',
+  asyncHandler(async (req, res) => {
+    const key = req.query.key || req.headers['x-admin-key'] || ''
+    if (key !== ADMIN_AUTH)
+      return res.status(403).json({ error: 'Invalid admin key' })
+
+    const item = await ShopItem.findById(req.params.itemId)
+    if (!item) return res.status(404).json({ error: 'Item not found' })
+
+    // Remove from users who have it equipped
+    await User.updateMany(
+      { selectedAvatarDecoration: item._id },
+      { $set: { selectedAvatarDecoration: null } }
+    )
+    await User.updateMany(
+      { selectedNameTag: item._id },
+      { $set: { selectedNameTag: null } }
+    )
+
+    // Remove from inventories
+    await UserInventory.deleteMany({ itemId: item._id })
+
+    await ShopItem.deleteOne({ _id: item._id })
+
+    res.json({ ok: true })
+  })
+)
+
+/* ---------- USER INVENTORY ---------- */
+
+// Get user's inventory
+app.get(
+  '/users/:userId/inventory',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    if (req.params.userId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Cannot view another user inventory' })
+
+    const inventory = await UserInventory.find({ userId: req.user._id })
+      .populate('itemId', 'name description type imageUrl color price')
+
+    res.json({
+      items: inventory.map((inv) => ({
+        id: inv._id.toString(),
+        itemId: inv.itemId._id.toString(),
+        name: inv.itemId.name,
+        description: inv.itemId.description,
+        type: inv.itemId.type,
+        imageUrl: inv.itemId.imageUrl,
+        color: inv.itemId.color,
+        price: inv.itemId.price,
+        purchasedAt: inv.purchasedAt,
+      })),
+    })
+  })
+)
+
+// Buy item
+app.post(
+  '/shop/items/:itemId/buy',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const item = await ShopItem.findById(req.params.itemId)
+    if (!item) return res.status(404).json({ error: 'Item not found' })
+
+    // Check if user already owns it
+    const existing = await UserInventory.findOne({
+      userId: req.user._id,
+      itemId: item._id,
+    })
+    if (existing)
+      return res.status(409).json({ error: 'You already own this item' })
+
+    // Check currency
+    if ((req.user.currency || 0) < item.price)
+      return res.status(400).json({ error: 'Insufficient currency' })
+
+    // Deduct currency
+    req.user.currency = (req.user.currency || 0) - item.price
+    await req.user.save()
+
+    // Add to inventory
+    const inventory = await UserInventory.create({
+      userId: req.user._id,
+      itemId: item._id,
+    })
+
+    await createNotification(
+      req.user._id,
+      'system',
+      'Item Purchased',
+      `You purchased "${item.name}" for ${item.price} coins!`,
+      { itemId: item._id, name: item.name }
+    )
+
+    res.status(201).json({
+      inventory: {
+        id: inventory._id.toString(),
+        itemId: inventory.itemId.toString(),
+        purchasedAt: inventory.purchasedAt,
+      },
+      remainingCurrency: req.user.currency,
+    })
+  })
+)
+
+/* ---------- USER PROFILE ITEMS ---------- */
+
+// Select avatar decoration
+app.post(
+  '/users/:userId/avatar-decoration',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    if (req.params.userId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Cannot change another user items' })
+
+    const { itemId } = req.body
+
+    if (itemId === null || itemId === undefined) {
+      // Unequip
+      req.user.selectedAvatarDecoration = null
+      await req.user.save()
+      return res.json({ ok: true, selectedAvatarDecoration: null })
+    }
+
+    // Verify user owns this item
+    const owns = await UserInventory.findOne({
+      userId: req.user._id,
+      itemId,
+    })
+    if (!owns)
+      return res.status(403).json({ error: 'You do not own this item' })
+
+    // Verify it's the right type
+    const item = await ShopItem.findById(itemId)
+    if (!item)
+      return res.status(404).json({ error: 'Item not found' })
+    if (item.type !== 'avatar_decoration')
+      return res.status(400).json({ error: 'Item must be an avatar decoration' })
+
+    req.user.selectedAvatarDecoration = itemId
+    await req.user.save()
+
+    res.json({ ok: true, selectedAvatarDecoration: itemId })
+  })
+)
+
+// Select name tag
+app.post(
+  '/users/:userId/name-tag',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    if (req.params.userId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Cannot change another user items' })
+
+    const { itemId } = req.body
+
+    if (itemId === null || itemId === undefined) {
+      // Unequip
+      req.user.selectedNameTag = null
+      await req.user.save()
+      return res.json({ ok: true, selectedNameTag: null })
+    }
+
+    // Verify user owns this item
+    const owns = await UserInventory.findOne({
+      userId: req.user._id,
+      itemId,
+    })
+    if (!owns)
+      return res.status(403).json({ error: 'You do not own this item' })
+
+    // Verify it's the right type
+    const item = await ShopItem.findById(itemId)
+    if (!item)
+      return res.status(404).json({ error: 'Item not found' })
+    if (item.type !== 'name_tag')
+      return res.status(400).json({ error: 'Item must be a name tag' })
+
+    req.user.selectedNameTag = itemId
+    await req.user.save()
+
+    res.json({ ok: true, selectedNameTag: itemId })
+  })
+)
+
 /* ---------- EMOJIS (CUSTOM) ----------
    Only the server owner (or MANAGE_EMOJIS) can add/remove.
 */
@@ -3218,6 +3561,8 @@ app.post(
       Block.deleteMany({}),
       Emoji.deleteMany({}),
       AuditLog.deleteMany({}),
+      ShopItem.deleteMany({}),
+      UserInventory.deleteMany({}),
     ])
     res.json({ ok: true, cleared: true })
   })
