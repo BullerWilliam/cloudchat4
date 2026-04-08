@@ -179,6 +179,22 @@ const userSchema = new mongoose.Schema({
   lastSeenAt: { type: Date, default: Date.now },
 })
 
+// ---------- USER CONNECTION ----------
+const userConnectionSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  provider: { type: String, required: true }, // e.g., 'github', 'google', 'discord'
+  externalId: { type: String, required: true }, // ID from the external platform
+  username: { type: String, default: '' }, // Username from external platform
+  email: { type: String, default: '' }, // Email from external platform
+  avatar: { type: String, default: '' }, // Avatar URL from external platform
+  createdAt: { type: Date, default: Date.now },
+})
+userConnectionSchema.index({ userId: 1, provider: 1 }, { unique: true })
+
 // ---------- FRIEND REQUEST ----------
 const friendRequestSchema = new mongoose.Schema({
   fromUserId: {
@@ -617,6 +633,7 @@ const Block = mongoose.model('Block', blockSchema)
 const Emoji = mongoose.model('Emoji', emojiSchema)
 const AuditLog = mongoose.model('AuditLog', auditLogSchema)
 const Webhook = mongoose.model('Webhook', webhookSchema)
+const UserConnection = mongoose.model('UserConnection', userConnectionSchema)
 const AiChat = mongoose.model('AiChat', aiChatSchema)
 
 // ── AI Chat config ─────────────────────────────────────────────────────────
@@ -1076,6 +1093,95 @@ app.post(
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     res.json({ id: user._id.toString() })
+  })
+)
+
+/* ---------- USER CONNECTIONS ---------- */
+
+// Get user's connections
+app.get(
+  '/users/:userId/connections',
+  asyncHandler(async (req, res) => {
+    const connections = await UserConnection.find({ userId: req.params.userId })
+
+    res.json({
+      connections: connections.map((c) => ({
+        id: c._id.toString(),
+        userId: c.userId.toString(),
+        provider: c.provider,
+        externalId: c.externalId,
+        username: c.username,
+        email: c.email,
+        avatar: c.avatar,
+        createdAt: c.createdAt,
+      })),
+    })
+  })
+)
+
+// Add a connection
+app.post(
+  '/users/:userId/connections',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    if (req.params.userId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Cannot add connections for another user' })
+
+    const { provider, externalId, username, email, avatar } = req.body
+    if (!provider || !externalId)
+      return res.status(400).json({ error: 'provider and externalId are required' })
+
+    // Check if this connection already exists for this user
+    const existing = await UserConnection.findOne({
+      userId: req.user._id,
+      provider: normalizeText(provider),
+    })
+    if (existing)
+      return res.status(409).json({ error: 'Connection for this provider already exists' })
+
+    const connection = await UserConnection.create({
+      userId: req.user._id,
+      provider: normalizeText(provider),
+      externalId: normalizeText(externalId),
+      username: normalizeText(username) || '',
+      email: normalizeText(email) || '',
+      avatar: normalizeText(avatar) || '',
+    })
+
+    res.status(201).json({
+      connection: {
+        id: connection._id.toString(),
+        userId: connection.userId.toString(),
+        provider: connection.provider,
+        externalId: connection.externalId,
+        username: connection.username,
+        email: connection.email,
+        avatar: connection.avatar,
+        createdAt: connection.createdAt,
+      },
+    })
+  })
+)
+
+// Remove a connection
+app.delete(
+  '/users/:userId/connections/:connectionId',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    if (req.params.userId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Cannot remove connections for another user' })
+
+    const connection = await UserConnection.findOne({
+      _id: req.params.connectionId,
+      userId: req.user._id,
+    })
+    if (!connection) return res.status(404).json({ error: 'Connection not found' })
+
+    await UserConnection.deleteOne({ _id: connection._id })
+
+    res.json({ ok: true })
   })
 )
 

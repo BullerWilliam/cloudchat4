@@ -446,6 +446,110 @@ Get a specific user's public profile. **No authentication required.**
 
 ---
 
+#### GET /users/:userId/connections
+Get all external connections for a user. **No authentication required.**
+
+**Response (200 OK):**
+```json
+{
+  "connections": [
+    {
+      "id": "65conn1...",
+      "userId": "65a123...",
+      "provider": "github",
+      "externalId": "12345678",
+      "username": "johndoe",
+      "email": "john@github.com",
+      "avatar": "https://avatars.githubusercontent.com/u/12345678",
+      "createdAt": "2024-01-15T14:00:00.000Z"
+    },
+    {
+      "id": "65conn2...",
+      "userId": "65a123...",
+      "provider": "discord",
+      "externalId": "987654321",
+      "username": "JohnDoe#1234",
+      "email": "",
+      "avatar": "https://cdn.discordapp.com/avatars/987654321/abc123.png",
+      "createdAt": "2024-01-15T15:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /users/:userId/connections
+Add an external connection. **Authenticated user only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "provider": "github",
+  "externalId": "12345678",
+  "username": "johndoe",
+  "email": "john@github.com",
+  "avatar": "https://avatars.githubusercontent.com/u/12345678"
+}
+```
+
+**Required Fields:**
+- `provider` - Platform name (e.g., 'github', 'google', 'discord')
+- `externalId` - User ID from the external platform
+
+**Optional Fields:**
+- `username` - Username from external platform
+- `email` - Email from external platform
+- `avatar` - Avatar URL from external platform
+
+**Response (201 Created):**
+```json
+{
+  "connection": {
+    "id": "65conn1...",
+    "userId": "65a123...",
+    "provider": "github",
+    "externalId": "12345678",
+    "username": "johndoe",
+    "email": "john@github.com",
+    "avatar": "https://avatars.githubusercontent.com/u/12345678",
+    "createdAt": "2024-01-15T14:00:00.000Z"
+  }
+}
+```
+
+**Response (409 Conflict):**
+```json
+{
+  "error": "Connection for this provider already exists"
+}
+```
+
+---
+
+#### DELETE /users/:userId/connections/:connectionId
+Remove an external connection. **Authenticated user only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+---
+
 #### GET /users/:userId/notification-settings
 Get notification preferences.
 
