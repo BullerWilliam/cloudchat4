@@ -131,21 +131,19 @@ Content-Type: application/json
 **Body:**
 ```json
 {
-  "username": "johndoe",
+  "displayName": "John Doe",
   "email": "john@example.com",
   "password": "securepass123",
-  "displayName": "John Doe",
   "imageUrl": "https://example.com/avatar.jpg"
 }
 ```
 
 **Required Fields:**
-- `username` - Unique, lowercase, trimmed
-- `email` - Unique, valid email format
+- `displayName` - User display name (not unique)
+- `email` - Unique email
 - `password` - Minimum 6 characters
 
 **Optional Fields:**
-- `displayName` - Display name (defaults to username)
 - `imageUrl` - Avatar URL
 
 **Response (201 Created):**
@@ -154,10 +152,8 @@ Content-Type: application/json
   "token": "eyJhbGciOiJIUzI1NiIs...",
   "user": {
     "id": "65a123...",
-    "username": "johndoe",
     "displayName": "John Doe",
     "email": "john@example.com",
-    "emailVerified": false,
     "imageUrl": "https://example.com/avatar.jpg",
     "bio": "",
     "status": "offline",
@@ -171,14 +167,14 @@ Content-Type: application/json
 **Response (400 Bad Request):**
 ```json
 {
-  "error": "username, email and password are required"
+  "error": "displayName, email and password are required"
 }
 ```
 
 **Response (409 Conflict):**
 ```json
 {
-  "error": "username or email already exists"
+  "error": "email already exists"
 }
 ```
 
@@ -195,14 +191,14 @@ Content-Type: application/json
 **Body:**
 ```json
 {
-  "identifier": "johndoe",
+  "email": "john@example.com",
   "password": "securepass123"
 }
 ```
 
 **Fields:**
-- `identifier` - Username or email (case-insensitive)
-- `password` - User password
+- `email` - Account email (required)
+- `password` - Account password
 
 **Response (200 OK):**
 ```json
@@ -210,10 +206,8 @@ Content-Type: application/json
   "token": "eyJhbGciOiJIUzI1NiIs...",
   "user": {
     "id": "65a123...",
-    "username": "johndoe",
     "displayName": "John Doe",
     "email": "john@example.com",
-    "emailVerified": false,
     "imageUrl": "",
     "bio": "",
     "status": "offline",
@@ -246,10 +240,8 @@ Authorization: Bearer <token>
 {
   "user": {
     "id": "65a123...",
-    "username": "johndoe",
     "displayName": "John Doe",
     "email": "john@example.com",
-    "emailVerified": true,
     "imageUrl": "https://example.com/avatar.jpg",
     "bio": "Software developer",
     "status": "online",
@@ -257,13 +249,6 @@ Authorization: Bearer <token>
     "createdAt": "2024-01-15T10:00:00.000Z",
     "lastSeenAt": "2024-01-15T10:30:00.000Z"
   }
-}
-```
-
-**Response (401 Unauthorized):**
-```json
-{
-  "error": "Missing token"
 }
 ```
 
@@ -281,7 +266,6 @@ Content-Type: application/json
 **Body:**
 ```json
 {
-  "username": "newusername",
   "displayName": "New Name",
   "email": "new@example.com",
   "imageUrl": "https://example.com/new-avatar.jpg",
@@ -290,68 +274,22 @@ Content-Type: application/json
 ```
 
 **Fields:** All optional
-- `username` - New username (lowercase, unique)
 - `displayName` - New display name
 - `email` - New email (unique)
 - `imageUrl` - New avatar URL
 - `bio` - New bio
 
-**Response (200 OK):**
-```json
-{
-  "user": {
-    "id": "65a123...",
-    "username": "newusername",
-    "displayName": "New Name",
-    "email": "new@example.com",
-    "emailVerified": true,
-    "imageUrl": "https://example.com/new-avatar.jpg",
-    "bio": "Updated bio",
-    "status": "online",
-    "activity": null,
-    "createdAt": "2024-01-15T10:00:00.000Z",
-    "lastSeenAt": "2024-01-15T10:30:00.000Z"
-  }
-}
-```
-
 **Response (409 Conflict):**
 ```json
 {
-  "error": "username or email already exists"
+  "error": "email already exists"
 }
 ```
 
 ---
 
-#### POST /auth/verify/email/request
-Request a new email verification code.
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
-
-**Rate Limit:** One request per 2 minutes per user.
-
-**Response (200 OK):**
-```json
-{
-  "ok": true
-}
-```
-
-**Response (429 Too Many Requests):**
-```json
-{
-  "error": "You can request a new code only every 2 minutes"
-}
-```
-
----
-
-#### POST /auth/verify/email/confirm
-Confirm email verification with code.
+#### PATCH /users/:userId/display-name
+Change the authenticated user's display name.
 
 **Headers:**
 ```
@@ -362,30 +300,13 @@ Content-Type: application/json
 **Body:**
 ```json
 {
-  "code": "123456"
+  "displayName": "New Name"
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "ok": true
-}
-```
-
-**Response (400 Bad Request):**
-```json
-{
-  "error": "Invalid verification code"
-}
-```
-
-**Response (410 Gone):**
-```json
-{
-  "error": "Verification code expired"
-}
-```
+**Rules:**
+- `:userId` must match the authenticated user id.
+- `displayName` is required and can be shared by multiple users.
 
 ---
 
@@ -400,23 +321,19 @@ Content-Type: application/json
 **Body:**
 ```json
 {
-  "email": "john@example.com"
+  "email": "john@example.com",
+  "userId": "65a123..."
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "ok": true
-}
-```
-
-*Note: Returns success even if email doesn't exist (security).* 
+**Behavior:**
+- If `email` and `userId` match an account, a reset code is emailed.
+- Response is still `{ "ok": true }` for non-matching accounts.
 
 ---
 
 #### POST /auth/reset-password
-Reset password using code from email.
+Reset password using the emailed code.
 
 **Headers:**
 ```
@@ -427,31 +344,24 @@ Content-Type: application/json
 ```json
 {
   "email": "john@example.com",
+  "userId": "65a123...",
   "code": "123456",
   "newPassword": "newsecurepass123"
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "ok": true
-}
-```
-
-**Response (400 Bad Request):**
-```json
-{
-  "error": "newPassword must be at least 6 characters"
-}
-```
+**Required Fields:**
+- `email`
+- `userId`
+- `code`
+- `newPassword` (min 6 chars)
 
 ---
 
 ### Users
 
 #### GET /users/search
-Search for users by username, display name, or email.
+Search for users by display name, email, or exact user id.
 
 **Headers:**
 ```
@@ -461,18 +371,14 @@ Authorization: Bearer <token>
 **Query Parameters:**
 - `q` - Search query string
 
-**Example:** `GET /users/search?q=john`
-
 **Response (200 OK):**
 ```json
 {
   "users": [
     {
       "id": "65a123...",
-      "username": "johndoe",
       "displayName": "John Doe",
       "email": "john@example.com",
-      "emailVerified": true,
       "imageUrl": "https://example.com/avatar.jpg",
       "bio": "Developer",
       "status": "online",
@@ -494,10 +400,8 @@ Get a specific user's public profile. **No authentication required.**
 {
   "user": {
     "id": "65a123...",
-    "username": "johndoe",
     "displayName": "John Doe",
     "email": "john@example.com",
-    "emailVerified": true,
     "imageUrl": "",
     "bio": "",
     "status": "online",
@@ -505,13 +409,6 @@ Get a specific user's public profile. **No authentication required.**
     "createdAt": "2024-01-15T10:00:00.000Z",
     "lastSeenAt": "2024-01-15T10:30:00.000Z"
   }
-}
-```
-
-**Response (404 Not Found):**
-```json
-{
-  "error": "User not found"
 }
 ```
 
@@ -646,7 +543,7 @@ Content-Type: application/json
 ---
 
 #### POST /users/getid
-Get a user's ID by their username. **No authentication required.**
+Get a user's ID by email. **No authentication required.**
 
 **Headers:**
 ```
@@ -656,31 +553,14 @@ Content-Type: application/json
 **Body:**
 ```json
 {
-  "username": "johndoe"
+  "email": "john@example.com"
 }
 ```
-
-**Fields:**
-- `username` - The username to look up (required, case-insensitive)
 
 **Response (200 OK):**
 ```json
 {
   "id": "65a123..."
-}
-```
-
-**Response (400 Bad Request):**
-```json
-{
-  "error": "username is required"
-}
-```
-
-**Response (404 Not Found):**
-```json
-{
-  "error": "User not found"
 }
 ```
 
@@ -747,16 +627,18 @@ Authorization: Bearer <token>
 {
   "requests": [
     {
-      "_id": "65c789...",
+      "id": "65c789...",
       "fromUserId": {
-        "_id": "65a123...",
-        "username": "johndoe",
+        "id": "65a123...",
         "displayName": "John Doe",
-        "imageUrl": ""
+        "imageUrl": "",
+        "status": "online",
+        "activity": null
       },
       "toUserId": "65b456...",
       "status": "pending",
-      "createdAt": "2024-01-15T10:30:00.000Z"
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "respondedAt": null
     }
   ]
 }
@@ -777,16 +659,18 @@ Authorization: Bearer <token>
 {
   "requests": [
     {
-      "_id": "65c789...",
+      "id": "65c789...",
       "fromUserId": "65a123...",
       "toUserId": {
-        "_id": "65b456...",
-        "username": "janedoe",
+        "id": "65b456...",
         "displayName": "Jane Doe",
-        "imageUrl": ""
+        "imageUrl": "",
+        "status": "offline",
+        "activity": null
       },
       "status": "pending",
-      "createdAt": "2024-01-15T10:30:00.000Z"
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "respondedAt": null
     }
   ]
 }
@@ -848,10 +732,11 @@ Authorization: Bearer <token>
 {
   "friends": [
     {
-      "_id": "65b456...",
-      "username": "janedoe",
+      "id": "65b456...",
       "displayName": "Jane Doe",
-      "imageUrl": ""
+      "imageUrl": "",
+      "status": "offline",
+      "activity": null
     }
   ]
 }
@@ -909,16 +794,10 @@ Authorization: Bearer <token>
       "id": "65d012...",
       "user": {
         "id": "65b456...",
-        "username": "janedoe",
         "displayName": "Jane Doe",
-        "email": "jane@example.com",
-        "emailVerified": true,
         "imageUrl": "",
-        "bio": "",
         "status": "offline",
-        "activity": null,
-        "createdAt": "2024-01-15T09:00:00.000Z",
-        "lastSeenAt": "2024-01-15T09:00:00.000Z"
+        "activity": null
       },
       "createdAt": "2024-01-15T11:00:00.000Z"
     }
@@ -1059,11 +938,10 @@ Get detailed server information. **No authentication required.**
   },
   "members": [
     {
-      "_id": "65f678...",
+      "id": "65f678...",
       "serverId": "65e345...",
       "userId": {
-        "_id": "65a123...",
-        "username": "johndoe",
+        "id": "65a123...",
         "displayName": "John Doe",
         "imageUrl": "",
         "status": "online",
@@ -1209,7 +1087,7 @@ Authorization: Bearer <token>
 ---
 
 #### PATCH /servers/:serverId/settings
-Update server settings. Requires verified email.
+Update server settings.
 
 **Headers:**
 ```
@@ -1320,7 +1198,7 @@ Authorization: Bearer <token>
 ### Server Invites
 
 #### POST /servers/:serverId/invites/custom
-Create a custom invite link. Requires verified email.
+Create a custom invite link.
 
 **Headers:**
 ```
@@ -2642,10 +2520,6 @@ Common HTTP status codes:
 ## Rate Limiting
 
 Default rate limit: **300 requests per minute** per IP.
-
-Email verification code requests: **1 per 2 minutes** per user.
-
----
 
 ## Getting Started
 

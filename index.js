@@ -100,14 +100,7 @@ mongoose.set('strictQuery', true)
 
 // ---------- USER ----------
 const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true,
-  },
-  displayName: { type: String, default: '' },
+  displayName: { type: String, default: '', trim: true },
   email: {
     type: String,
     required: true,
@@ -115,7 +108,6 @@ const userSchema = new mongoose.Schema({
     trim: true,
     lowercase: true,
   },
-  emailVerified: { type: Boolean, default: false }, // ← new
   passwordHash: { type: String, required: true },
   imageUrl: { type: String, default: '' },
   bio: { type: String, default: '' },
@@ -411,19 +403,6 @@ const healthPingSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 })
 
-// ---------- EMAIL VERIFICATION (for account verification) ----------
-const emailVerificationSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-    unique: true,
-  },
-  code: { type: String, required: true },
-  expiresAt: { type: Date, required: true },
-  createdAt: { type: Date, default: Date.now },
-})
-
 // ---------- PASSWORD RESET ----------
 const passwordResetSchema = new mongoose.Schema({
   userId: {
@@ -522,7 +501,6 @@ const DmThread = mongoose.model('DmThread', dmThreadSchema)
 const Message = mongoose.model('Message', messageSchema)
 const Notification = mongoose.model('Notification', notificationSchema)
 const HealthPing = mongoose.model('HealthPing', healthPingSchema)
-const EmailVerification = mongoose.model('EmailVerification', emailVerificationSchema)
 const PasswordReset = mongoose.model('PasswordReset', passwordResetSchema)
 const Block = mongoose.model('Block', blockSchema)
 const Emoji = mongoose.model('Emoji', emojiSchema)
@@ -539,11 +517,9 @@ const hf = new HfInference(HF_TOKEN)
 function sanitizeUser(user) {
   if (!user) return null
   return {
-    id: user._id,
-    username: user.username,
-    displayName: user.displayName,
+    id: user._id.toString(),
+    displayName: getUserDisplayName(user),
     email: user.email,
-    emailVerified: user.emailVerified,
     imageUrl: user.imageUrl,
     bio: user.bio,
     status: user.status,
@@ -553,11 +529,34 @@ function sanitizeUser(user) {
   }
 }
 
+function sanitizeBasicUser(user) {
+  if (!user) return null
+  return {
+    id: user._id.toString(),
+    displayName: getUserDisplayName(user),
+    imageUrl: user.imageUrl || '',
+    status: user.status,
+    activity: user.activity,
+  }
+}
+
 function signToken(user) {
   return jwt.sign({ id: user._id.toString() }, JWT_SECRET, { expiresIn: '30d' })
 }
 function normalizeText(value) {
   return String(value || '').trim()
+}
+function getUserDisplayName(user) {
+  if (!user) return ''
+  return (
+    normalizeText(user.displayName) ||
+    normalizeText(user.username) ||
+    normalizeText(user.email) ||
+    user._id.toString()
+  )
+}
+function isValidObjectId(value) {
+  return mongoose.Types.ObjectId.isValid(String(value || ''))
 }
 function makeInviteCode() {
   return crypto.randomBytes(8).toString('hex')
@@ -597,15 +596,6 @@ async function loadUser(req, res, next) {
   const user = await User.findById(req.userId)
   if (!user) return res.status(401).json({ error: 'Invalid token' })
   req.user = user
-  next()
-}
-
-// ── Verification middlewares ──────────────────────────────────────────────────
-function requireEmailVerified(req, res, next) {
-  if (!req.user.emailVerified)
-    return res
-      .status(403)
-      .json({ error: 'You must verify your email to use this endpoint' })
   next()
 }
 
@@ -719,50 +709,31 @@ async function requireChannelMember(req, res, next) {
 app.post(
   '/auth/register',
   asyncHandler(async (req, res) => {
-    const username = normalizeText(req.body.username).toLowerCase()
     const email = normalizeText(req.body.email).toLowerCase()
     const password = normalizeText(req.body.password)
     const displayName = normalizeText(req.body.displayName)
     const imageUrl = normalizeText(req.body.imageUrl)
 
-    if (!username || !email || !password)
+    if (!displayName || !email || !password)
       return res
         .status(400)
-        .json({ error: 'username, email and password are required' })
+        .json({ error: 'displayName, email and password are required' })
     if (password.length < 6)
       return res
         .status(400)
         .json({ error: 'password must be at least 6 characters' })
 
-    const existing = await User.findOne({
-      $or: [{ username }, { email }],
-    })
+    const existing = await User.findOne({ email })
     if (existing)
-      return res
-        .status(409)
-        .json({ error: 'username or email already exists' })
+      return res.status(409).json({ error: 'email already exists' })
 
     const passwordHash = await bcrypt.hash(password, 12)
     const user = await User.create({
-      username,
-      displayName: displayName || username,
+      displayName,
       email,
       passwordHash,
       imageUrl,
     })
-
-    // send verification email (placeholder)
-    const code = generateNumericCode(6)
-    await EmailVerification.create({
-      userId: user._id,
-      code,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
-    })
-    await sendEmail(
-      user.email,
-      'Verify your account',
-      `Your verification code is: ${code}`
-    )
 
     res
       .status(201)
@@ -773,17 +744,15 @@ app.post(
 app.post(
   '/auth/login',
   asyncHandler(async (req, res) => {
-    const identifier = normalizeText(req.body.identifier).toLowerCase()
+    const email = normalizeText(req.body.email || req.body.identifier).toLowerCase()
     const password = normalizeText(req.body.password)
 
-    if (!identifier || !password)
+    if (!email || !password)
       return res
         .status(400)
-        .json({ error: 'identifier and password are required' })
+        .json({ error: 'email and password are required' })
 
-    const user = await User.findOne({
-      $or: [{ username: identifier }, { email: identifier }],
-    })
+    const user = await User.findOne({ email })
     if (!user) return res.status(401).json({ error: 'Invalid credentials' })
 
     const ok = await bcrypt.compare(password, user.passwordHash)
@@ -792,8 +761,6 @@ app.post(
     user.lastSeenAt = new Date()
     await user.save()
 
-    // if the user hasn't verified email yet we still allow login,
-    // but many privileged endpoints check `requireEmailVerified`.
     res.json({ token: signToken(user), user: sanitizeUser(user) })
   })
 )
@@ -813,30 +780,24 @@ app.patch(
   loadUser,
   asyncHandler(async (req, res) => {
     const updates = {}
-    const allowed = [
-      'username',
-      'displayName',
-      'email',
-      'imageUrl',
-      'bio',
-    ]
+    const allowed = ['displayName', 'email', 'imageUrl', 'bio']
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = normalizeText(req.body[key])
     }
 
-    if (updates.username) updates.username = updates.username.toLowerCase()
     if (updates.email) updates.email = updates.email.toLowerCase()
+    if (req.body.displayName !== undefined && !updates.displayName)
+      return res.status(400).json({ error: 'displayName cannot be empty' })
+    if (req.body.email !== undefined && !updates.email)
+      return res.status(400).json({ error: 'email cannot be empty' })
 
-    if (updates.username || updates.email) {
+    if (updates.email) {
       const conflict = await User.findOne({
         _id: { $ne: req.user._id },
-        $or: [
-          updates.username ? { username: updates.username } : null,
-          updates.email ? { email: updates.email } : null,
-        ].filter(Boolean),
+        email: updates.email,
       })
       if (conflict)
-        return res.status(409).json({ error: 'username or email already exists' })
+        return res.status(409).json({ error: 'email already exists' })
     }
 
     Object.assign(req.user, updates)
@@ -845,59 +806,18 @@ app.patch(
   })
 )
 
-/* ---------- EMAIL VERIFICATION ENDPOINTS ---------- */
-app.post(
-  '/auth/verify/email/request',
+app.patch(
+  '/users/:userId/display-name',
   requireAuth,
   loadUser,
   asyncHandler(async (req, res) => {
-    // throttle: only 1 request per 2 minutes per user
-    const last = await EmailVerification.findOne({ userId: req.user._id })
-    if (last && last.createdAt > new Date(Date.now() - 2 * 60 * 1000))
-      return res
-        .status(429)
-        .json({ error: 'You can request a new code only every 2 minutes' })
-
-    const code = generateNumericCode(6)
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 min
-
-    await EmailVerification.findOneAndUpdate(
-      { userId: req.user._id },
-      { code, expiresAt, createdAt: new Date() },
-      { upsert: true }
-    )
-
-    await sendEmail(
-      req.user.email,
-      'Your verification code',
-      `Your verification code is ${code}. It expires in 15 minutes.`
-    )
-    res.json({ ok: true })
-  })
-)
-
-app.post(
-  '/auth/verify/email/confirm',
-  requireAuth,
-  loadUser,
-  asyncHandler(async (req, res) => {
-    const code = normalizeText(req.body.code)
-    if (!code) return res.status(400).json({ error: 'code required' })
-
-    const verification = await EmailVerification.findOne({ userId: req.user._id })
-    if (!verification)
-      return res.status(404).json({ error: 'Verification not requested' })
-
-    if (verification.expiresAt < new Date())
-      return res.status(410).json({ error: 'Verification code expired' })
-
-    if (verification.code !== code)
-      return res.status(400).json({ error: 'Invalid verification code' })
-
-    req.user.emailVerified = true
+    if (req.params.userId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Cannot change another user display name' })
+    const displayName = normalizeText(req.body.displayName)
+    if (!displayName) return res.status(400).json({ error: 'displayName is required' })
+    req.user.displayName = displayName
     await req.user.save()
-    await EmailVerification.deleteOne({ _id: verification._id })
-    res.json({ ok: true })
+    res.json({ user: sanitizeUser(req.user) })
   })
 )
 
@@ -906,9 +826,12 @@ app.post(
   '/auth/forgot-password',
   asyncHandler(async (req, res) => {
     const email = normalizeText(req.body.email).toLowerCase()
-    if (!email) return res.status(400).json({ error: 'email required' })
+    const userId = normalizeText(req.body.userId)
+    if (!email || !userId)
+      return res.status(400).json({ error: 'email and userId required' })
+    if (!isValidObjectId(userId)) return res.json({ ok: true })
 
-    const user = await User.findOne({ email })
+    const user = await User.findOne({ _id: userId, email })
     if (!user)
       // Do not reveal if the email exists – exploit mitigation
       return res.json({ ok: true })
@@ -934,19 +857,22 @@ app.post(
   '/auth/reset-password',
   asyncHandler(async (req, res) => {
     const email = normalizeText(req.body.email).toLowerCase()
+    const userId = normalizeText(req.body.userId)
     const code = normalizeText(req.body.code)
     const newPassword = normalizeText(req.body.newPassword)
 
-    if (!email || !code || !newPassword)
+    if (!email || !userId || !code || !newPassword)
       return res
         .status(400)
-        .json({ error: 'email, code and newPassword required' })
+        .json({ error: 'email, userId, code and newPassword required' })
     if (newPassword.length < 6)
       return res
         .status(400)
         .json({ error: 'newPassword must be at least 6 characters' })
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ error: 'Invalid request' })
 
-    const user = await User.findOne({ email })
+    const user = await User.findOne({ _id: userId, email })
     if (!user) return res.status(400).json({ error: 'Invalid request' })
 
     const reset = await PasswordReset.findOne({ userId: user._id })
@@ -971,13 +897,12 @@ app.get(
   asyncHandler(async (req, res) => {
     const q = normalizeText(req.query.q)
     if (!q) return res.json({ users: [] })
-    const users = await User.find({
-      $or: [
-        { username: new RegExp(q, 'i') },
-        { displayName: new RegExp(q, 'i') },
-        { email: new RegExp(q, 'i') },
-      ],
-    }).limit(25)
+    const searchConditions = [
+      { displayName: new RegExp(q, 'i') },
+      { email: new RegExp(q, 'i') },
+    ]
+    if (isValidObjectId(q)) searchConditions.unshift({ _id: q })
+    const users = await User.find({ $or: searchConditions }).limit(25)
     res.json({ users: users.map(sanitizeUser) })
   })
 )
@@ -991,14 +916,14 @@ app.get(
   })
 )
 
-/* ---------- GET USER ID BY USERNAME ---------- */
+/* ---------- GET USER ID BY EMAIL ---------- */
 app.post(
   '/users/getid',
   asyncHandler(async (req, res) => {
-    const username = normalizeText(req.body.username).toLowerCase()
-    if (!username) return res.status(400).json({ error: 'username is required' })
+    const email = normalizeText(req.body.email).toLowerCase()
+    if (!email) return res.status(400).json({ error: 'email is required' })
 
-    const user = await User.findOne({ username })
+    const user = await User.findOne({ email })
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     res.json({ id: user._id.toString() })
@@ -1064,7 +989,7 @@ app.post(
       target._id,
       'friend_request',
       'Friend request',
-      `${req.user.displayName || req.user.username} sent you a friend request`,
+      `${getUserDisplayName(req.user)} sent you a friend request`,
       { friendRequestId: request._id }
     )
     res.status(201).json({ request })
@@ -1079,8 +1004,17 @@ app.get(
     const requests = await FriendRequest.find({
       toUserId: req.user._id,
       status: 'pending',
-    }).populate('fromUserId', 'username displayName imageUrl')
-    res.json({ requests })
+    }).populate('fromUserId', 'displayName imageUrl status activity')
+    res.json({
+      requests: requests.map((request) => ({
+        id: request._id.toString(),
+        fromUserId: sanitizeBasicUser(request.fromUserId),
+        toUserId: request.toUserId.toString(),
+        status: request.status,
+        createdAt: request.createdAt,
+        respondedAt: request.respondedAt,
+      })),
+    })
   })
 )
 
@@ -1092,8 +1026,17 @@ app.get(
     const requests = await FriendRequest.find({
       fromUserId: req.user._id,
       status: 'pending',
-    }).populate('toUserId', 'username displayName imageUrl')
-    res.json({ requests })
+    }).populate('toUserId', 'displayName imageUrl status activity')
+    res.json({
+      requests: requests.map((request) => ({
+        id: request._id.toString(),
+        fromUserId: request.fromUserId.toString(),
+        toUserId: sanitizeBasicUser(request.toUserId),
+        status: request.status,
+        createdAt: request.createdAt,
+        respondedAt: request.respondedAt,
+      })),
+    })
   })
 )
 
@@ -1124,7 +1067,7 @@ app.post(
         otherUser._id,
         'system',
         'Friend request update',
-        `${req.user.displayName || req.user.username} ${
+        `${getUserDisplayName(req.user)} ${
           action === 'accept' ? 'accepted' : 'declined'
         } your friend request`,
         { friendRequestId: request._id }
@@ -1144,13 +1087,13 @@ app.get(
       status: 'accepted',
       $or: [{ fromUserId: req.user._id }, { toUserId: req.user._id }],
     })
-      .populate('fromUserId', 'username displayName imageUrl')
-      .populate('toUserId', 'username displayName imageUrl')
+      .populate('fromUserId', 'displayName imageUrl status activity')
+      .populate('toUserId', 'displayName imageUrl status activity')
 
     const friends = requests.map((r) =>
       r.fromUserId._id.toString() === req.user._id.toString()
-        ? r.toUserId
-        : r.fromUserId
+        ? sanitizeBasicUser(r.toUserId)
+        : sanitizeBasicUser(r.fromUserId)
     )
     res.json({ friends })
   })
@@ -1192,12 +1135,12 @@ app.get(
   asyncHandler(async (req, res) => {
     const blocks = await Block.find({ blockerId: req.user._id }).populate(
       'blockedId',
-      'username displayName imageUrl'
+      'displayName imageUrl status activity'
     )
     res.json({
       blocks: blocks.map((b) => ({
-        id: b._id,
-        user: sanitizeUser(b.blockedId),
+        id: b._id.toString(),
+        user: sanitizeBasicUser(b.blockedId),
         createdAt: b.createdAt,
       })),
     })
@@ -1310,7 +1253,7 @@ app.get(
     if (!serverDoc) return res.status(404).json({ error: 'Server not found' })
     const members = await ServerMember.find({
       serverId: req.params.serverId,
-    }).populate('userId', 'username displayName imageUrl status activity')
+    }).populate('userId', 'displayName imageUrl status activity')
     const roles = await Role.find({ serverId: req.params.serverId }).sort({
       position: 1,
     })
@@ -1323,7 +1266,16 @@ app.get(
     const emojis = await Emoji.find({ serverId: req.params.serverId })
     res.json({
       server: serverDoc,
-      members,
+      members: members.map((member) => ({
+        id: member._id.toString(),
+        serverId: member.serverId.toString(),
+        userId: sanitizeBasicUser(member.userId),
+        roleIds: member.roleIds.map((roleId) => roleId.toString()),
+        nick: member.nick,
+        joinedAt: member.joinedAt,
+        muted: member.muted,
+        deafened: member.deafened,
+      })),
       roles,
       categories,
       channels,
@@ -1353,7 +1305,6 @@ app.patch(
   requireAuth,
   loadUser,
   requireServerMember,
-  requireEmailVerified,
   asyncHandler(async (req, res) => {
     const server = await Server.findById(req.params.serverId)
     if (!server) return res.status(404).json({ error: 'Server not found' })
@@ -1392,14 +1343,13 @@ app.patch(
 )
 
 /* ---------- SERVER INVITES ----------
-   *Verified* e‑mail required for creating custom invites.
+   Authenticated users can create custom invites.
 */
 app.post(
   '/servers/:serverId/invites/custom',
   requireAuth,
   loadUser,
   requireServerMember,
-  requireEmailVerified,
   asyncHandler(async (req, res) => {
     const inviteeId = req.body.inviteeId || null
     const maxUses = Number(req.body.maxUses || 0) // 0 = unlimited
@@ -2599,7 +2549,6 @@ app.post(
       Message.deleteMany({}),
       Notification.deleteMany({}),
       HealthPing.deleteMany({}),
-      EmailVerification.deleteMany({}),
       PasswordReset.deleteMany({}),
       Block.deleteMany({}),
       Emoji.deleteMany({}),
@@ -2624,9 +2573,23 @@ app.use((err, req, res, next) => {
 /* ---------- START ----------
    Connect to MongoDB and start the server.
 */
+async function dropLegacyUsernameIndex() {
+  try {
+    const indexes = await User.collection.indexes()
+    const legacy = indexes.find((idx) => idx.key && idx.key.username === 1)
+    if (!legacy) return
+    await User.collection.dropIndex(legacy.name)
+    console.log(`[Startup] Dropped legacy user index: ${legacy.name}`)
+  } catch (err) {
+    if (err?.codeName === 'NamespaceNotFound' || err?.code === 26) return
+    console.warn('[Startup] Could not drop legacy username index:', err.message)
+  }
+}
+
 async function start() {
   try {
     await mongoose.connect(MONGODB_URL)
+    await dropLegacyUsernameIndex()
     console.log('✅ MongoDB connected')
     app.listen(PORT, () => {
       console.log(`🚀 API running on port ${PORT}`)
