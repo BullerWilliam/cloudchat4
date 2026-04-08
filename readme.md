@@ -1708,12 +1708,7 @@ Content-Type: application/json
 ---
 
 #### DELETE /shop/items/:itemId
-Delete a shop item. **Admin only.**
-
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+Delete a shop item. **Admin only.** No auth header needed, just admin key.
 
 **Query:**
 - `key` - Admin auth key
