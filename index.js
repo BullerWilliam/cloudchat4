@@ -3018,7 +3018,7 @@ app.patch(
 app.delete(
   '/shop/items/:itemId',
   asyncHandler(async (req, res) => {
-    const key = req.query.key || req.headers['x-admin-key'] || ''
+    const key = normalizeText(req.body.key)
     if (key !== ADMIN_AUTH)
       return res.status(403).json({ error: 'Invalid admin key' })
 

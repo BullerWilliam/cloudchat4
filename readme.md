@@ -1708,12 +1708,19 @@ Content-Type: application/json
 ---
 
 #### DELETE /shop/items/:itemId
-Delete a shop item. **Admin only.** No auth header needed, just admin key.
+Delete a shop item. **Admin only.** Requires admin key in body.
 
-**Query:**
-- `key` - Admin auth key
+**Headers:**
+```
+Content-Type: application/json
+```
 
-**Example:** `DELETE /shop/items/65shop1...?key=admin-auth-key`
+**Body:**
+```json
+{
+  "key": "admin-auth-key"
+}
+```
 
 **Response (200 OK):**
 ```json
