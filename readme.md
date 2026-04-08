@@ -1195,6 +1195,204 @@ Authorization: Bearer <token>
 
 ---
 
+### Server Ownership Transfer
+
+Transfer ownership of a server to another member. The receiver must accept within 5 minutes or the transfer expires.
+
+#### POST /servers/:serverId/ownership-transfer
+Initiate ownership transfer to another server member. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "toUserId": "65b456..."
+}
+```
+
+**Required Fields:**
+- `toUserId` - ID of the member who will receive ownership
+
+**Response (201 Created):**
+```json
+{
+  "transfer": {
+    "id": "65x012...",
+    "serverId": "65e345...",
+    "fromUserId": "65a123...",
+    "toUserId": "65b456...",
+    "status": "pending",
+    "expiresAt": "2024-01-15T12:35:00.000Z",
+    "createdAt": "2024-01-15T12:30:00.000Z"
+  }
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "Cannot transfer ownership to yourself"
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Only the server owner can transfer ownership"
+}
+```
+
+**Response (409 Conflict):**
+```json
+{
+  "error": "There is already a pending ownership transfer for this server"
+}
+```
+
+---
+
+#### GET /servers/:serverId/ownership-transfer/pending
+Get the pending ownership transfer for the current user (receiver only).
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "transfer": {
+    "id": "65x012...",
+    "serverId": "65e345...",
+    "fromUserId": {
+      "id": "65a123...",
+      "displayName": "John Doe",
+      "imageUrl": "",
+      "status": "online",
+      "activity": null
+    },
+    "toUserId": "65b456...",
+    "status": "pending",
+    "expiresAt": "2024-01-15T12:35:00.000Z",
+    "createdAt": "2024-01-15T12:30:00.000Z"
+  }
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+  "error": "No pending ownership transfer found"
+}
+```
+
+---
+
+#### GET /servers/:serverId/ownership-transfers
+Get all ownership transfer history for a server. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "transfers": [
+    {
+      "id": "65x012...",
+      "serverId": "65e345...",
+      "fromUserId": { ...user info... },
+      "toUserId": { ...user info... },
+      "status": "accepted",
+      "expiresAt": "2024-01-15T12:35:00.000Z",
+      "createdAt": "2024-01-15T12:30:00.000Z",
+      "respondedAt": "2024-01-15T12:32:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /servers/:serverId/ownership-transfer/respond
+Accept or decline an ownership transfer. **Receiver only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "action": "accept"
+}
+```
+
+**Actions:** `accept`, `decline`
+
+**Response (200 OK) - Accepted:**
+```json
+{
+  "transfer": {
+    "id": "65x012...",
+    "serverId": "65e345...",
+    "fromUserId": "65a123...",
+    "toUserId": "65b456...",
+    "status": "accepted",
+    "expiresAt": "2024-01-15T12:35:00.000Z",
+    "createdAt": "2024-01-15T12:30:00.000Z",
+    "respondedAt": "2024-01-15T12:32:00.000Z"
+  }
+}
+```
+
+**Response (200 OK) - Declined:**
+```json
+{
+  "transfer": {
+    "id": "65x012...",
+    ...,
+    "status": "declined"
+  }
+}
+```
+
+**Response (410 Gone):**
+```json
+{
+  "error": "Ownership transfer has expired"
+}
+```
+
+---
+
+#### DELETE /servers/:serverId/ownership-transfer
+Cancel a pending ownership transfer. **Owner only.**
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+---
+
 ### Server Invites
 
 #### POST /servers/:serverId/invites/custom

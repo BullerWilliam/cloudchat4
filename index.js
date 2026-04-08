@@ -283,6 +283,36 @@ const channelSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 })
 
+// ---------- SERVER OWNERSHIP TRANSFER ----------
+const serverOwnershipTransferSchema = new mongoose.Schema({
+  serverId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Server',
+    required: true,
+  },
+  fromUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  toUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'declined', 'cancelled', 'expired'],
+    default: 'pending',
+  },
+  expiresAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+  respondedAt: { type: Date, default: null },
+})
+serverOwnershipTransferSchema.index({ serverId: 1, status: 1 })
+serverOwnershipTransferSchema.index({ toUserId: 1, status: 1 })
+serverOwnershipTransferSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }) // TTL index for cleanup
+
 // ---------- SERVER INVITE ----------
 const serverInviteSchema = new mongoose.Schema({
   serverId: {
@@ -490,6 +520,7 @@ const aiChatSchema = new mongoose.Schema({
 // ==================== Model registration =====================
 const User = mongoose.model('User', userSchema)
 const FriendRequest = mongoose.model('FriendRequest', friendRequestSchema)
+const ServerOwnershipTransfer = mongoose.model('ServerOwnershipTransfer', serverOwnershipTransferSchema)
 const Server = mongoose.model('Server', serverSchema)
 const ServerMember = mongoose.model('ServerMember', serverMemberSchema)
 const Role = mongoose.model('Role', roleSchema)
@@ -1339,6 +1370,326 @@ app.patch(
       { updatedFields: allowed.filter((k) => req.body[k] !== undefined) }
     )
     res.json({ server })
+  })
+)
+
+/* ---------- SERVER OWNERSHIP TRANSFER ----------
+   Server owner can initiate transfer to another member.
+   Receiver must accept within 5 minutes or it expires.
+*/
+
+// Create ownership transfer request (owner only)
+app.post(
+  '/servers/:serverId/ownership-transfer',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const { toUserId } = req.body
+    if (!toUserId)
+      return res.status(400).json({ error: 'toUserId is required' })
+
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    // Only owner can transfer ownership
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can transfer ownership' })
+
+    // Cannot transfer to self
+    if (toUserId.toString() === req.user._id.toString())
+      return res.status(400).json({ error: 'Cannot transfer ownership to yourself' })
+
+    // Target user must exist
+    const targetUser = await User.findById(toUserId)
+    if (!targetUser) return res.status(404).json({ error: 'Target user not found' })
+
+    // Target must be a server member
+    const targetMember = await ServerMember.findOne({
+      serverId: req.params.serverId,
+      userId: toUserId,
+    })
+    if (!targetMember)
+      return res.status(400).json({ error: 'Target user is not a member of this server' })
+
+    // Check for existing pending transfer
+    const existingPending = await ServerOwnershipTransfer.findOne({
+      serverId: req.params.serverId,
+      status: 'pending',
+    })
+    if (existingPending)
+      return res.status(409).json({ error: 'There is already a pending ownership transfer for this server' })
+
+    // Create transfer request (expires in 5 minutes)
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+    const transfer = await ServerOwnershipTransfer.create({
+      serverId: req.params.serverId,
+      fromUserId: req.user._id,
+      toUserId,
+      expiresAt,
+    })
+
+    await createNotification(
+      toUserId,
+      'system',
+      'Server Ownership Transfer',
+      `${getUserDisplayName(req.user)} wants to transfer ownership of "${server.name}" to you. You have 5 minutes to accept.`,
+      { ownershipTransferId: transfer._id, serverId: server._id, serverName: server.name }
+    )
+
+    // Schedule auto-cancellation after 5 minutes
+    setTimeout(async () => {
+      const updated = await ServerOwnershipTransfer.findOneAndUpdate(
+        { _id: transfer._id, status: 'pending' },
+        { status: 'expired', respondedAt: new Date() },
+        { new: true }
+      )
+      if (updated) {
+        // Notify both parties
+        await createNotification(
+          transfer.fromUserId,
+          'system',
+          'Ownership Transfer Expired',
+          `The ownership transfer for "${server.name}" expired because the receiver did not respond in time.`,
+          { ownershipTransferId: transfer._id, serverId: server._id }
+        )
+        await createNotification(
+          transfer.toUserId,
+          'system',
+          'Ownership Transfer Expired',
+          `The ownership transfer for "${server.name}" has expired.`,
+          { ownershipTransferId: transfer._id, serverId: server._id }
+        )
+      }
+    }, 5 * 60 * 1000)
+
+    await createAuditLog(
+      server._id,
+      'OWNERSHIP_TRANSFER_INITIATED',
+      req.user._id,
+      targetUser._id,
+      { transferId: transfer._id, expiresAt }
+    )
+
+    res.status(201).json({
+      transfer: {
+        id: transfer._id.toString(),
+        serverId: transfer.serverId.toString(),
+        fromUserId: transfer.fromUserId.toString(),
+        toUserId: transfer.toUserId.toString(),
+        status: transfer.status,
+        expiresAt: transfer.expiresAt,
+        createdAt: transfer.createdAt,
+      },
+    })
+  })
+)
+
+// Get pending ownership transfer (for receiver)
+app.get(
+  '/servers/:serverId/ownership-transfer/pending',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const transfer = await ServerOwnershipTransfer.findOne({
+      serverId: req.params.serverId,
+      toUserId: req.user._id,
+      status: 'pending',
+    }).populate('fromUserId', 'displayName imageUrl')
+
+    if (!transfer) return res.status(404).json({ error: 'No pending ownership transfer found' })
+
+    res.json({
+      transfer: {
+        id: transfer._id.toString(),
+        serverId: transfer.serverId.toString(),
+        fromUserId: sanitizeBasicUser(transfer.fromUserId),
+        toUserId: transfer.toUserId.toString(),
+        status: transfer.status,
+        expiresAt: transfer.expiresAt,
+        createdAt: transfer.createdAt,
+      },
+    })
+  })
+)
+
+// Get all ownership transfers for a server (owner only)
+app.get(
+  '/servers/:serverId/ownership-transfers',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    // Only owner can view transfer history
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can view transfer history' })
+
+    const transfers = await ServerOwnershipTransfer.find({
+      serverId: req.params.serverId,
+    })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .populate('fromUserId', 'displayName imageUrl')
+      .populate('toUserId', 'displayName imageUrl')
+
+    res.json({
+      transfers: transfers.map((t) => ({
+        id: t._id.toString(),
+        serverId: t.serverId.toString(),
+        fromUserId: sanitizeBasicUser(t.fromUserId),
+        toUserId: sanitizeBasicUser(t.toUserId),
+        status: t.status,
+        expiresAt: t.expiresAt,
+        createdAt: t.createdAt,
+        respondedAt: t.respondedAt,
+      })),
+    })
+  })
+)
+
+// Respond to ownership transfer (accept/decline)
+app.post(
+  '/servers/:serverId/ownership-transfer/respond',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const { action } = req.body
+    if (!['accept', 'decline'].includes(action))
+      return res.status(400).json({ error: 'action must be accept or decline' })
+
+    const transfer = await ServerOwnershipTransfer.findOne({
+      serverId: req.params.serverId,
+      toUserId: req.user._id,
+      status: 'pending',
+    })
+
+    if (!transfer) return res.status(404).json({ error: 'No pending ownership transfer found' })
+
+    // Check if expired
+    if (transfer.expiresAt < new Date()) {
+      transfer.status = 'expired'
+      transfer.respondedAt = new Date()
+      await transfer.save()
+      return res.status(410).json({ error: 'Ownership transfer has expired' })
+    }
+
+    transfer.status = action === 'accept' ? 'accepted' : 'declined'
+    transfer.respondedAt = new Date()
+    await transfer.save()
+
+    const server = await Server.findById(req.params.serverId)
+
+    if (action === 'accept') {
+      // Transfer ownership
+      const oldOwnerId = server.ownerId
+      server.ownerId = req.user._id
+      await server.save()
+
+      // Notify both parties
+      await createNotification(
+        oldOwnerId,
+        'system',
+        'Ownership Transferred',
+        `${getUserDisplayName(req.user)} has accepted ownership of "${server.name}".`,
+        { ownershipTransferId: transfer._id, serverId: server._id }
+      )
+      await createNotification(
+        req.user._id,
+        'system',
+        'Ownership Received',
+        `You are now the owner of "${server.name}".`,
+        { ownershipTransferId: transfer._id, serverId: server._id }
+      )
+
+      await createAuditLog(
+        server._id,
+        'OWNERSHIP_TRANSFER_COMPLETED',
+        oldOwnerId,
+        req.user._id,
+        { transferId: transfer._id, previousOwnerId: oldOwnerId, newOwnerId: req.user._id }
+      )
+    } else {
+      // Declined
+      await createNotification(
+        transfer.fromUserId,
+        'system',
+        'Ownership Transfer Declined',
+        `${getUserDisplayName(req.user)} declined the ownership transfer for "${server.name}".`,
+        { ownershipTransferId: transfer._id, serverId: server._id }
+      )
+
+      await createAuditLog(
+        server._id,
+        'OWNERSHIP_TRANSFER_DECLINED',
+        transfer.fromUserId,
+        req.user._id,
+        { transferId: transfer._id }
+      )
+    }
+
+    res.json({
+      transfer: {
+        id: transfer._id.toString(),
+        serverId: transfer.serverId.toString(),
+        fromUserId: transfer.fromUserId.toString(),
+        toUserId: transfer.toUserId.toString(),
+        status: transfer.status,
+        expiresAt: transfer.expiresAt,
+        createdAt: transfer.createdAt,
+        respondedAt: transfer.respondedAt,
+      },
+    })
+  })
+)
+
+// Cancel pending ownership transfer (owner only)
+app.delete(
+  '/servers/:serverId/ownership-transfer',
+  requireAuth,
+  loadUser,
+  requireServerMember,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+
+    // Only owner can cancel
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res.status(403).json({ error: 'Only the server owner can cancel transfers' })
+
+    const transfer = await ServerOwnershipTransfer.findOne({
+      serverId: req.params.serverId,
+      status: 'pending',
+    })
+
+    if (!transfer) return res.status(404).json({ error: 'No pending ownership transfer found' })
+
+    transfer.status = 'cancelled'
+    transfer.respondedAt = new Date()
+    await transfer.save()
+
+    // Notify the receiver
+    await createNotification(
+      transfer.toUserId,
+      'system',
+      'Ownership Transfer Cancelled',
+      `The ownership transfer for "${server.name}" has been cancelled by the owner.`,
+      { ownershipTransferId: transfer._id, serverId: server._id }
+    )
+
+    await createAuditLog(
+      server._id,
+      'OWNERSHIP_TRANSFER_CANCELLED',
+      req.user._id,
+      transfer.toUserId,
+      { transferId: transfer._id }
+    )
+
+    res.json({ ok: true })
   })
 )
 
