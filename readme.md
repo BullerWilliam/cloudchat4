@@ -3309,6 +3309,177 @@ Content-Type: application/json
 
 ---
 
+### CloudCoins Subscription
+
+The platform uses **CloudCoins** as a currency for maintaining an active subscription. Subscriptions last **30 days** and do **NOT auto-renew** - users must actively post content to renew.
+
+#### GET /subscription/status
+Check your current subscription status and CloudCoins balance.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "subscription": {
+    "isActive": true,
+    "expiresAt": "2024-02-15T10:30:00.000Z",
+    "lastRenewedAt": "2024-01-15T10:30:00.000Z",
+    "cloudCoins": 500,
+    "cost": 100,
+    "durationDays": 30
+  }
+}
+```
+
+---
+
+#### POST /subscription/renew
+Renew your subscription by posting content. Costs **100 CloudCoins** and extends subscription by **30 days**.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "content": "This is my renewal post with at least 10 characters!",
+  "channelId": "65o345...",
+  "attachments": ["https://example.com/image.png"]
+}
+```
+
+**Fields:**
+- `content` - Message content (required, minimum 10 characters)
+- `channelId` - Channel to post in (optional - if not provided, just renews without posting)
+- `attachments` - Array of attachment URLs (optional)
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "subscription": {
+    "isActive": true,
+    "expiresAt": "2024-02-15T10:30:00.000Z",
+    "lastRenewedAt": "2024-01-15T10:30:00.000Z",
+    "cloudCoins": 400
+  },
+  "message": {
+    "id": "65msg1...",
+    "content": "This is my renewal post with at least 10 characters!",
+    "channelId": "65o345...",
+    "createdAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "Content must be at least 10 characters to renew subscription"
+}
+```
+
+**Response (400 Insufficient Funds):**
+```json
+{
+  "error": "Insufficient CloudCoins",
+  "required": 100,
+  "current": 50,
+  "missing": 50
+}
+```
+
+---
+
+#### POST /subscription/gift
+Gift a subscription to another user using your CloudCoins.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "targetUserId": "65b456...",
+  "content": "Gift message here"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "giftedTo": {
+    "id": "65b456...",
+    "displayName": "Jane Doe"
+  },
+  "subscription": {
+    "expiresAt": "2024-02-15T10:30:00.000Z",
+    "lastRenewedAt": "2024-01-15T10:30:00.000Z"
+  },
+  "remainingCloudCoins": 300
+}
+```
+
+---
+
+#### GET /users/:userId/subscription
+Get a user's public subscription status.
+
+**Response (200 OK):**
+```json
+{
+  "userId": "65a123...",
+  "subscription": {
+    "isActive": true,
+    "expiresAt": "2024-02-15T10:30:00.000Z"
+  }
+}
+```
+
+---
+
+### Updated User Objects
+
+`GET /auth/me` and `GET /users/:userId` now return subscription fields:
+
+```json
+{
+  "user": {
+    "id": "65a123...",
+    "displayName": "John Doe",
+    "email": "john@example.com",
+    "imageUrl": "",
+    "bio": "",
+    "status": "online",
+    "activity": null,
+    "currency": 3500,
+    "selectedAvatarDecoration": null,
+    "selectedNameTag": null,
+    "cloudCoins": 500,
+    "subscription": {
+      "isActive": true,
+      "expiresAt": "2024-02-15T10:30:00.000Z",
+      "lastRenewedAt": "2024-01-15T10:30:00.000Z"
+    },
+    "createdAt": "2024-01-15T10:00:00.000Z",
+    "lastSeenAt": "2024-01-15T12:00:00.000Z"
+  }
+}
+```
+
+---
+
 ## Permission System
 
 Available permissions:

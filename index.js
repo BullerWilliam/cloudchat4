@@ -31,6 +31,13 @@ const MONGODB_URL =
   )}@cloudchat4.aoxoo9t.mongodb.net/?appName=cloudchat4`
 const ADMIN_AUTH = process.env.ADMIN_AUTH || 'admin-auth'
 
+// CloudCoins Subscription Configuration
+const CLOUDCOINS_SUBSCRIPTION_CONFIG = {
+  costInCloudCoins: 100,    // Cost to renew subscription
+  durationInDays: 30,       // Subscription lasts 30 days
+  minimumPostLength: 10,    // Minimum characters required for a post
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 //  Global middlewares
 // ──────────────────────────────────────────────────────────────────────────────
@@ -174,6 +181,13 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ShopItem',
     default: null,
+  },
+  // CloudCoins Subscription
+  cloudCoins: { type: Number, default: 0, min: 0 },
+  subscription: {
+    isActive: { type: Boolean, default: false },
+    expiresAt: { type: Date, default: null },
+    lastRenewedAt: { type: Date, default: null },
   },
   createdAt: { type: Date, default: Date.now },
   lastSeenAt: { type: Date, default: Date.now },
@@ -657,6 +671,13 @@ function sanitizeUser(user) {
     currency: user.currency || 0,
     selectedAvatarDecoration: user.selectedAvatarDecoration?.toString() || null,
     selectedNameTag: user.selectedNameTag?.toString() || null,
+    // CloudCoins & Subscription
+    cloudCoins: user.cloudCoins || 0,
+    subscription: {
+      isActive: user.subscription?.isActive || false,
+      expiresAt: user.subscription?.expiresAt || null,
+      lastRenewedAt: user.subscription?.lastRenewedAt || null,
+    },
     createdAt: user.createdAt,
     lastSeenAt: user.lastSeenAt,
   }
@@ -3686,6 +3707,255 @@ app.post(
       UserInventory.deleteMany({}),
     ])
     res.json({ ok: true, cleared: true })
+  })
+)
+
+/* ---------- CLOUDCOINS SUBSCRIPTION ----------
+   Subscription system using CloudCoins currency.
+   Users must post content to renew, subscription lasts 30 days,
+   and does NOT auto-renew.
+*/
+
+// Helper function to check if subscription is expired and update status
+async function checkAndUpdateSubscription(user) {
+  if (user.subscription?.isActive && user.subscription?.expiresAt) {
+    if (new Date(user.subscription.expiresAt) < new Date()) {
+      user.subscription.isActive = false
+      await user.save()
+    }
+  }
+  return user
+}
+
+// GET /subscription/status - Check current user's subscription status
+app.get(
+  '/subscription/status',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    // Check if expired and update
+    await checkAndUpdateSubscription(req.user)
+    
+    res.json({
+      subscription: {
+        isActive: req.user.subscription?.isActive || false,
+        expiresAt: req.user.subscription?.expiresAt || null,
+        lastRenewedAt: req.user.subscription?.lastRenewedAt || null,
+        cloudCoins: req.user.cloudCoins || 0,
+        cost: CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins,
+        durationDays: CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays,
+      }
+    })
+  })
+)
+
+// POST /subscription/renew - Renew subscription by posting content
+app.post(
+  '/subscription/renew',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const { content, channelId } = req.body
+    
+    // Validate the "post" - must be a message with minimum length
+    if (!content || normalizeText(content).length < CLOUDCOINS_SUBSCRIPTION_CONFIG.minimumPostLength) {
+      return res.status(400).json({ 
+        error: `Content must be at least ${CLOUDCOINS_SUBSCRIPTION_CONFIG.minimumPostLength} characters to renew subscription` 
+      })
+    }
+
+    // Check if user has enough CloudCoins
+    if ((req.user.cloudCoins || 0) < CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins) {
+      return res.status(400).json({ 
+        error: 'Insufficient CloudCoins',
+        required: CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins,
+        current: req.user.cloudCoins || 0,
+        missing: CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins - (req.user.cloudCoins || 0)
+      })
+    }
+
+    // If channelId is provided, actually post the message
+    if (channelId) {
+      const channel = await Channel.findById(channelId)
+      if (!channel) return res.status(404).json({ error: 'Channel not found' })
+      
+      // Verify user is a member of the server
+      const member = await ServerMember.findOne({
+        serverId: channel.serverId,
+        userId: req.user._id,
+      })
+      if (!member) return res.status(403).json({ error: 'Not a member of this server' })
+
+      // Create the message
+      const message = await Message.create({
+        kind: 'server',
+        senderId: req.user._id,
+        serverId: channel.serverId,
+        channelId: channel._id,
+        content: normalizeText(content),
+        attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
+      })
+
+      // Deduct CloudCoins and update subscription
+      req.user.cloudCoins -= CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins
+      
+      // Calculate new expiration date
+      const now = new Date()
+      const expiresAt = new Date(now.getTime() + CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays * 24 * 60 * 60 * 1000)
+      
+      req.user.subscription = {
+        isActive: true,
+        expiresAt: expiresAt,
+        lastRenewedAt: now,
+      }
+      
+      await req.user.save()
+
+      await createNotification(
+        req.user._id,
+        'system',
+        'Subscription Renewed',
+        `Your subscription has been renewed for ${CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays} days. You now have ${req.user.cloudCoins} CloudCoins remaining.`,
+        { expiresAt, cloudCoinsRemaining: req.user.cloudCoins }
+      )
+
+      res.json({
+        success: true,
+        subscription: {
+          isActive: true,
+          expiresAt: expiresAt,
+          lastRenewedAt: now,
+          cloudCoins: req.user.cloudCoins,
+        },
+        message: {
+          id: message._id.toString(),
+          content: message.content,
+          channelId: message.channelId.toString(),
+          createdAt: message.createdAt,
+        }
+      })
+    } else {
+      // No channelId - just renew without posting (for testing or alternative flows)
+      req.user.cloudCoins -= CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins
+      
+      const now = new Date()
+      const expiresAt = new Date(now.getTime() + CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays * 24 * 60 * 60 * 1000)
+      
+      req.user.subscription = {
+        isActive: true,
+        expiresAt: expiresAt,
+        lastRenewedAt: now,
+      }
+      
+      await req.user.save()
+
+      await createNotification(
+        req.user._id,
+        'system',
+        'Subscription Renewed',
+        `Your subscription has been renewed for ${CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays} days. You now have ${req.user.cloudCoins} CloudCoins remaining.`,
+        { expiresAt, cloudCoinsRemaining: req.user.cloudCoins }
+      )
+
+      res.json({
+        success: true,
+        subscription: {
+          isActive: true,
+          expiresAt: expiresAt,
+          lastRenewedAt: now,
+          cloudCoins: req.user.cloudCoins,
+        }
+      })
+    }
+  })
+)
+
+// POST /subscription/gift - Gift subscription to another user
+app.post(
+  '/subscription/gift',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const { targetUserId, content, channelId } = req.body
+    
+    if (!targetUserId) return res.status(400).json({ error: 'targetUserId is required' })
+    
+    const targetUser = await User.findById(targetUserId)
+    if (!targetUser) return res.status(404).json({ error: 'Target user not found' })
+
+    // Validate the "post"
+    if (!content || normalizeText(content).length < CLOUDCOINS_SUBSCRIPTION_CONFIG.minimumPostLength) {
+      return res.status(400).json({ 
+        error: `Content must be at least ${CLOUDCOINS_SUBSCRIPTION_CONFIG.minimumPostLength} characters` 
+      })
+    }
+
+    // Check if user has enough CloudCoins
+    if ((req.user.cloudCoins || 0) < CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins) {
+      return res.status(400).json({ 
+        error: 'Insufficient CloudCoins',
+        required: CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins,
+        current: req.user.cloudCoins || 0,
+      })
+    }
+
+    // Deduct from giver
+    req.user.cloudCoins -= CLOUDCOINS_SUBSCRIPTION_CONFIG.costInCloudCoins
+    await req.user.save()
+
+    // Apply to recipient
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays * 24 * 60 * 60 * 1000)
+    
+    targetUser.subscription = {
+      isActive: true,
+      expiresAt: expiresAt,
+      lastRenewedAt: now,
+    }
+    await targetUser.save()
+
+    // Create notification for recipient
+    await createNotification(
+      targetUser._id,
+      'system',
+      'Gifted Subscription',
+      `${getUserDisplayName(req.user)} has gifted you a ${CLOUDCOINS_SUBSCRIPTION_CONFIG.durationInDays}-day subscription!`,
+      { fromUserId: req.user._id, expiresAt }
+    )
+
+    res.json({
+      success: true,
+      giftedTo: {
+        id: targetUser._id.toString(),
+        displayName: getUserDisplayName(targetUser),
+      },
+      subscription: {
+        expiresAt: expiresAt,
+        lastRenewedAt: now,
+      },
+      remainingCloudCoins: req.user.cloudCoins,
+    })
+  })
+)
+
+// GET /users/:userId/subscription - Get a specific user's subscription (public)
+app.get(
+  '/users/:userId/subscription',
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.params.userId)
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    
+    // Check and update if expired
+    await checkAndUpdateSubscription(user)
+    
+    // Return limited public info
+    res.json({
+      userId: user._id.toString(),
+      subscription: {
+        isActive: user.subscription?.isActive || false,
+        expiresAt: user.subscription?.expiresAt || null,
+      }
+    })
   })
 )
 
