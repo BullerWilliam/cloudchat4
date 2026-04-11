@@ -170,8 +170,8 @@ const userSchema = new mongoose.Schema({
     of: Boolean,
     default: {},
   },
-  // Currency & Shop
-  currency: { type: Number, default: 0, min: 0 },
+  // CloudCoins - used for both shop and subscriptions
+  cloudCoins: { type: Number, default: 0, min: 0 },
   selectedAvatarDecoration: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ShopItem',
@@ -182,8 +182,7 @@ const userSchema = new mongoose.Schema({
     ref: 'ShopItem',
     default: null,
   },
-  // CloudCoins Subscription
-  cloudCoins: { type: Number, default: 0, min: 0 },
+  // Subscription
   subscription: {
     isActive: { type: Boolean, default: false },
     expiresAt: { type: Date, default: null },
@@ -667,12 +666,11 @@ function sanitizeUser(user) {
     bio: user.bio,
     status: user.status,
     activity: user.activity,
-    // Shop & Currency
-    currency: user.currency || 0,
+    // CloudCoins & Shop
+    cloudCoins: user.cloudCoins || 0,
     selectedAvatarDecoration: user.selectedAvatarDecoration?.toString() || null,
     selectedNameTag: user.selectedNameTag?.toString() || null,
-    // CloudCoins & Subscription
-    cloudCoins: user.cloudCoins || 0,
+    // Subscription
     subscription: {
       isActive: user.subscription?.isActive || false,
       expiresAt: user.subscription?.expiresAt || null,
@@ -3218,12 +3216,12 @@ app.post(
     if (existing)
       return res.status(409).json({ error: 'You already own this item' })
 
-    // Check currency
-    if ((req.user.currency || 0) < item.price)
-      return res.status(400).json({ error: 'Insufficient currency' })
+    // Check CloudCoins
+    if ((req.user.cloudCoins || 0) < item.price)
+      return res.status(400).json({ error: 'Insufficient CloudCoins' })
 
-    // Deduct currency
-    req.user.currency = (req.user.currency || 0) - item.price
+    // Deduct CloudCoins
+    req.user.cloudCoins = (req.user.cloudCoins || 0) - item.price
     await req.user.save()
 
     // Add to inventory
@@ -3246,7 +3244,7 @@ app.post(
         itemId: inventory.itemId.toString(),
         purchasedAt: inventory.purchasedAt,
       },
-      remainingCurrency: req.user.currency,
+      remainingCloudCoins: req.user.cloudCoins,
     })
   })
 )
