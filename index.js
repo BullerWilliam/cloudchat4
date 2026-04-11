@@ -82,14 +82,14 @@ app.post('/health', async (req, res) => {
 
 // Rate limiter config
 const messageRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 messages per minute
+  windowMs: 1000, // 1 second
+  max: 1, // 1 message per second
   message: { error: 'Too many messages sent. Slow down!' },
 })
 
 const registerRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // 5 accounts per hour
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 accounts per minute
   message: { error: 'Too many accounts created. Try again later.' },
 })
 
