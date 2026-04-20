@@ -12,7 +12,7 @@ The main website is available at `/site` — this serves `site.html` from the pr
 
 ## Errors
 
-- **error 001:** Cant reach the servers
+- **ERROR 001:** Cant reach the servers
 
 ## Tech Stack
 
