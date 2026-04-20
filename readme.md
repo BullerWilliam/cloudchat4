@@ -10,6 +10,10 @@ CloudChat4 is a feature-rich chat server providing real-time messaging capabilit
 
 The main website is available at `/site` — this serves `site.html` from the project folder.
 
+## Errors
+
+- **error 001:** Cant reach the servers
+
 ## Tech Stack
 
 - **Runtime:** Node.js (ES Modules)
