@@ -22,6 +22,49 @@ The main website is available at `/site` — this serves `site.html` from the pr
 - **Authentication:** JWT + bcrypt
 - **Security:** Helmet, CORS, Rate Limiting
 
+## Security Features
+
+### Automatic Login/Signup Token Detection & Invalidation
+The server automatically scans all messages for exposed JWT authentication tokens (login/signup tokens) and immediately invalidates them. This helps protect users who accidentally share their authentication credentials in messages.
+
+**Token Types Monitored:**
+- JWT tokens (Bearer tokens from `/auth/login` and `/auth/register`)
+
+**How It Works:**
+1. When a user creates or edits a message, the content is automatically scanned for JWT token patterns
+2. If JWT tokens are detected, they are immediately blacklisted and invalidated
+3. The token is logged to prevent reuse
+4. The user receives a security notification about the detected tokens
+5. Message responses include a security warning when tokens are found
+
+**Token Cleanup:**
+- Blacklisted tokens are automatically removed after 30 days
+- No manual intervention needed
+
+### GitHub Exposure Scanning
+Administrators can trigger a proactive security scan to check if any blacklisted tokens have been exposed on GitHub repositories.
+
+**How It Works:**
+1. Admin triggers `/admin/scan-tokens-github` with admin key
+2. Server searches GitHub API for each blacklisted token
+3. If a token is found in any GitHub repository, it's flagged as exposed
+4. User receives a critical security notification
+5. Exposed tokens are marked for priority attention
+
+**Admin Endpoint:**
+```
+POST /admin/scan-tokens-github
+Body: { "key": "admin-auth-key" }
+Response: 
+{
+  "ok": true,
+  "message": "GitHub token exposure scan started. Users will be notified if tokens are found exposed.",
+  "note": "This is an async operation. Check back later for results."
+}
+```
+
+**Rate Limiting:** Scans include 1-second delays between GitHub API requests to respect rate limits.
+
 ## Environment Variables
 
 ```env

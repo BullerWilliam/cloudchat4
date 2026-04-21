@@ -624,6 +624,29 @@ const aiChatSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 })
 
+// ---------- TOKEN BLACKLIST ----------
+const tokenBlacklistSchema = new mongoose.Schema({
+  token: { type: String, required: true, unique: true, index: true },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  reason: { type: String, default: 'Token detected in shared script' },
+  detectedInMessageId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Message',
+    default: null,
+  },
+  detectedAt: { type: Date, default: Date.now },
+  foundOnGitHub: { type: Boolean, default: false },
+  foundOnGitHubAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now },
+})
+tokenBlacklistSchema.index({ userId: 1 })
+tokenBlacklistSchema.index({ foundOnGitHub: 1 })
+tokenBlacklistSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 }) // 30-day TTL
+
 // ==================== Model registration =====================
 const ShopItem = mongoose.model('ShopItem', shopItemSchema)
 const UserInventory = mongoose.model('UserInventory', userInventorySchema)
@@ -648,6 +671,7 @@ const AuditLog = mongoose.model('AuditLog', auditLogSchema)
 const Webhook = mongoose.model('Webhook', webhookSchema)
 const UserConnection = mongoose.model('UserConnection', userConnectionSchema)
 const AiChat = mongoose.model('AiChat', aiChatSchema)
+const TokenBlacklist = mongoose.model('TokenBlacklist', tokenBlacklistSchema)
 
 // ── AI Chat config ─────────────────────────────────────────────────────────
 const HF_TOKEN = process.env.HF_TOKEN || ''
@@ -771,12 +795,24 @@ function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET)
     req.userId = payload.id
+    req.token = token // Store token for later blacklist check
     next()
   } catch {
     return res.status(401).json({ error: 'Invalid token' })
   }
 }
 async function loadUser(req, res, next) {
+  // Check if token is blacklisted
+  if (req.token) {
+    const isBlacklisted = await isTokenBlacklisted(req.token)
+    if (isBlacklisted) {
+      return res.status(401).json({ 
+        error: 'Token has been invalidated due to security concerns. Please log in again.',
+        code: 'TOKEN_INVALIDATED'
+      })
+    }
+  }
+  
   const user = await User.findById(req.userId)
   if (!user) return res.status(401).json({ error: 'Invalid token' })
   req.user = user
@@ -834,6 +870,218 @@ async function createAuditLog(serverId, actionType, actorId, targetId = null, ex
     targetId,
     extra,
   })
+}
+
+// ── Token Detection & Invalidation helpers ──────────────────────────────────
+// Only detect JWT tokens from login/signup (authentication tokens)
+const JWT_TOKEN_PATTERN = /\b(eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\b/g
+
+// Scan text for JWT tokens (login/signup tokens only)
+function detectTokensInText(text) {
+  if (!text || typeof text !== 'string') return []
+  
+  const detectedTokens = []
+  const seen = new Set()
+  
+  const matches = text.matchAll(JWT_TOKEN_PATTERN)
+  for (const match of matches) {
+    const token = match[1] || match[0]
+    if (token && token.length > 10 && !seen.has(token)) {
+      seen.add(token)
+      detectedTokens.push(token)
+    }
+  }
+  
+  return detectedTokens
+}
+
+// Check if a token is blacklisted
+async function isTokenBlacklisted(token) {
+  if (!token) return false
+  const blacklisted = await TokenBlacklist.findOne({ token })
+  return !!blacklisted
+}
+
+// Invalidate a token and blacklist it
+async function invalidateToken(token, userId, messageId = null, reason = 'Token detected in shared script') {
+  if (!token || !userId) return null
+  
+  try {
+    // Check if already blacklisted
+    const existing = await TokenBlacklist.findOne({ token })
+    if (existing) return existing
+    
+    // Create blacklist entry
+    const blacklisted = await TokenBlacklist.create({
+      token,
+      userId,
+      detectedInMessageId: messageId,
+      reason,
+    })
+    
+    // Notify user about compromised token
+    await createNotification(
+      userId,
+      'system',
+      'Security Alert: Token Detected',
+      `A token was detected in a Discord message and has been invalidated for security. Change your credentials immediately if this was not intentional.`,
+      { detectedAt: new Date(), messageId, reason }
+    )
+    
+    return blacklisted
+  } catch (err) {
+    console.error('[TOKEN INVALIDATION ERROR]', err.message)
+    return null
+  }
+}
+
+// Scan message content and invalidate any tokens found
+async function scanAndInvalidateTokens(content, senderId, messageId) {
+  const tokens = detectTokensInText(content)
+  if (tokens.length === 0) return []
+  
+  console.log(`[TOKEN SCAN] Detected ${tokens.length} potential tokens in message ${messageId}`)
+  
+  const invalidated = []
+  for (const token of tokens) {
+    const result = await invalidateToken(token, senderId, messageId)
+    if (result) {
+      invalidated.push({
+        token: token.substring(0, 20) + '...',
+        blacklistId: result._id,
+      })
+    }
+  }
+  
+  return invalidated
+}
+
+// Check if auth token is blacklisted before allowing requests
+async function checkTokenBlacklist(req, res, next) {
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  
+  if (token) {
+    const isBlacklisted = await isTokenBlacklisted(token)
+    if (isBlacklisted) {
+      return res.status(401).json({ 
+        error: 'Token has been invalidated due to security concerns. Please log in again.',
+        code: 'TOKEN_INVALIDATED'
+      })
+    }
+  }
+  
+  next()
+}
+
+// Search GitHub for exposed tokens
+async function searchTokenOnGitHub(token) {
+  try {
+    const githubToken = process.env.GITHUB_SEARCH
+    if (!githubToken) {
+      console.warn('[GITHUB SEARCH] No GitHub token found in GITHUB_SEARCH env var. Skipping search.')
+      return false
+    }
+    
+    const query = `"${token}"`
+    const url = new URL('https://api.github.com/search/code')
+    url.searchParams.append('q', query)
+    url.searchParams.append('per_page', '1')
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'cloudchat4-security-scanner',
+        'Authorization': `token ${githubToken}`
+      }
+    })
+    
+    if (!response.ok) {
+      console.log(`[GITHUB SEARCH] Failed to search for token: ${response.status}`)
+      return false
+    }
+    
+    const data = await response.json()
+    const found = data.total_count > 0
+    
+    if (found) {
+      console.log(`[GITHUB SEARCH] ⚠️ Token found on GitHub! Total matches: ${data.total_count}`)
+    }
+    
+    return found
+  } catch (err) {
+    console.error('[GITHUB SEARCH ERROR]', err.message)
+    return false
+  }
+}
+
+// Scan all tokens in blacklist and check if they exist on GitHub
+async function scanAllTokensOnGitHub() {
+  try {
+    console.log('[TOKEN SCAN] Starting GitHub token exposure scan...')
+    
+    const allTokens = await TokenBlacklist.find().limit(100)
+    const results = {
+      total: allTokens.length,
+      scanned: 0,
+      foundOnGitHub: 0,
+      tokens: []
+    }
+    
+    for (const entry of allTokens) {
+      // Add delay to respect GitHub API rate limits
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const foundOnGitHub = await searchTokenOnGitHub(entry.token)
+      results.scanned++
+      
+      if (foundOnGitHub) {
+        results.foundOnGitHub++
+        results.tokens.push({
+          id: entry._id.toString(),
+          userId: entry.userId.toString(),
+          tokenPreview: entry.token.substring(0, 20) + '...',
+          foundOnGitHub: true,
+          scanTime: new Date()
+        })
+        
+        // Update the blacklist entry to mark it as found on GitHub
+        await TokenBlacklist.updateOne(
+          { _id: entry._id },
+          { 
+            $set: { 
+              foundOnGitHub: true,
+              foundOnGitHubAt: new Date()
+            }
+          }
+        )
+        
+        // Notify the user about the exposure
+        try {
+          await createNotification(
+            entry.userId,
+            'system',
+            'Critical Security Alert: Token Exposed on GitHub',
+            `Your authentication token was detected exposed in a GitHub repository. You must log out from all sessions and log back in immediately.`,
+            { 
+              tokenId: entry._id,
+              severity: 'critical',
+              foundOnGitHub: true
+            }
+          )
+        } catch (notifyErr) {
+          console.error('[NOTIFICATION ERROR]', notifyErr.message)
+        }
+      }
+    }
+    
+    console.log(`[TOKEN SCAN] Completed! Found ${results.foundOnGitHub} tokens exposed on GitHub out of ${results.scanned} scanned.`)
+    return results
+  } catch (err) {
+    console.error('[TOKEN SCAN ERROR]', err.message)
+    return { error: err.message }
+  }
 }
 
 // ── Friend / DM helpers ─────────────────────────────────────────────────────
@@ -2853,14 +3101,32 @@ app.post(
       content,
       attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
     })
+    
+    // Scan for tokens in the message content
+    const invalidatedTokens = await scanAndInvalidateTokens(
+      content,
+      req.user._id,
+      message._id
+    )
+    
+    // Add warning to response if tokens were detected
+    const response = { message }
+    if (invalidatedTokens.length > 0) {
+      response.security = {
+        tokensDetected: invalidatedTokens.length,
+        invalidatedTokens,
+        warning: 'Potential security tokens were detected in your message and have been invalidated. Change your credentials immediately.'
+      }
+    }
+    
     await createAuditLog(
       req.channel.serverId,
       'MESSAGE_CREATE',
       req.user._id,
       message._id,
-      { channelId: req.channel._id }
+      { channelId: req.channel._id, tokensDetected: invalidatedTokens.length }
     )
-    res.status(201).json({ message })
+    res.status(201).json(response)
   })
 )
 
@@ -2908,14 +3174,31 @@ app.patch(
     message.content = newContent
     message.editedAt = new Date()
     await message.save()
+    
+    // Scan edited content for tokens
+    const invalidatedTokens = await scanAndInvalidateTokens(
+      newContent,
+      message.senderId,
+      message._id
+    )
+    
+    const response = { message }
+    if (invalidatedTokens.length > 0) {
+      response.security = {
+        tokensDetected: invalidatedTokens.length,
+        invalidatedTokens,
+        warning: 'Potential security tokens were detected in your edited message and have been invalidated. Change your credentials immediately.'
+      }
+    }
+    
     await createAuditLog(
       req.channel.serverId,
       'MESSAGE_EDIT',
       req.user._id,
       message._id,
-      {}
+      { tokensDetected: invalidatedTokens.length }
     )
-    res.json({ message })
+    res.json(response)
   })
 )
 
@@ -3705,6 +3988,29 @@ app.post(
       UserInventory.deleteMany({}),
     ])
     res.json({ ok: true, cleared: true })
+  })
+)
+
+/* ---------- ADMIN: SCAN TOKENS ON GITHUB ----------
+   Admin endpoint to scan all blacklisted tokens and check if they're exposed on GitHub.
+   This runs asynchronously and notifies users if their tokens are found.
+*/
+app.post(
+  '/admin/scan-tokens-github',
+  asyncHandler(async (req, res) => {
+    const key = normalizeText(req.body.key)
+    if (key !== ADMIN_AUTH) return res.status(403).json({ error: 'Invalid admin key' })
+    
+    // Run scan asynchronously so the endpoint returns quickly
+    scanAllTokensOnGitHub().catch(err => {
+      console.error('[ASYNC SCAN ERROR]', err.message)
+    })
+    
+    res.json({ 
+      ok: true, 
+      message: 'GitHub token exposure scan started. Users will be notified if tokens are found exposed.',
+      note: 'This is an async operation. Check back later for results.'
+    })
   })
 )
 
