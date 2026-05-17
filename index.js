@@ -4014,6 +4014,49 @@ app.post(
   })
 )
 
+/* ---------- ADMIN CLOUDCOINS ----------
+   Add or remove CloudCoins from a user with the admin key.
+*/
+app.post(
+  '/get-cloudcoins',
+  asyncHandler(async (req, res) => {
+    const key = normalizeText(req.body.key)
+    if (key !== ADMIN_AUTH) return res.status(403).json({ error: 'Invalid admin key' })
+
+    const userId = normalizeText(req.body.userId)
+    const amount = Number(req.body.amount)
+
+    if (!userId) return res.status(400).json({ error: 'userId is required' })
+    if (!Number.isFinite(amount))
+      return res.status(400).json({ error: 'amount must be a valid number' })
+
+    const user = await User.findById(userId)
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    const currentCloudCoins = user.cloudCoins || 0
+    const updatedCloudCoins = currentCloudCoins + amount
+
+    if (updatedCloudCoins < 0) {
+      return res.status(400).json({
+        error: 'CloudCoins cannot go below 0',
+        current: currentCloudCoins,
+        attemptedAmount: amount,
+      })
+    }
+
+    user.cloudCoins = updatedCloudCoins
+    await user.save()
+
+    res.json({
+      ok: true,
+      userId: user._id.toString(),
+      amount,
+      previousCloudCoins: currentCloudCoins,
+      cloudCoins: user.cloudCoins,
+    })
+  })
+)
+
 /* ---------- CLOUDCOINS SUBSCRIPTION ----------
    Subscription system using CloudCoins currency.
    Users must post content to renew, subscription lasts 30 days,

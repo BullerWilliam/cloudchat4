@@ -165,6 +165,57 @@ Content-Type: application/json
 
 ---
 
+#### POST /get-cloudcoins
+Add or remove CloudCoins from a user with the admin key.
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "key": "your-admin-auth-key",
+  "userId": "65a123...",
+  "amount": 250
+}
+```
+
+**Fields:**
+- `key` - Admin key (required)
+- `userId` - Target user ID (required)
+- `amount` - Number of CloudCoins to add or remove (required). Use a negative number to remove coins.
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "userId": "65a123...",
+  "amount": 250,
+  "previousCloudCoins": 100,
+  "cloudCoins": 350
+}
+```
+
+**Response (400 Bad Request):**
+```json
+{
+  "error": "CloudCoins cannot go below 0",
+  "current": 100,
+  "attemptedAmount": -250
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Invalid admin key"
+}
+```
+
+---
+
 ### Authentication
 
 #### POST /auth/register
