@@ -2035,13 +2035,13 @@ Select/unequip an avatar decoration. **Authenticated user only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
 **Body (equip):**
 ```json
 {
+  "token": "eyJhbGciOiJIUzI1NiIs...",
   "itemId": "65shop1..."
 }
 ```
@@ -2049,6 +2049,7 @@ Content-Type: application/json
 **Body (unequip):**
 ```json
 {
+  "token": "eyJhbGciOiJIUzI1NiIs...",
   "itemId": null
 }
 ```

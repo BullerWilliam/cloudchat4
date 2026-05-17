@@ -801,6 +801,18 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Invalid token' })
   }
 }
+function requireBodyToken(req, res, next) {
+  const token = normalizeText(req.body.token)
+  if (!token) return res.status(401).json({ error: 'Missing token' })
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    req.userId = payload.id
+    req.token = token
+    next()
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' })
+  }
+}
 async function loadUser(req, res, next) {
   // Check if token is blacklisted
   if (req.token) {
@@ -3537,7 +3549,7 @@ app.post(
 // Select avatar decoration
 app.post(
   '/users/:userId/avatar-decoration',
-  requireAuth,
+  requireBodyToken,
   loadUser,
   asyncHandler(async (req, res) => {
     if (req.params.userId.toString() !== req.user._id.toString())
