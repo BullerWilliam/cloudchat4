@@ -77,15 +77,15 @@ ADMIN_AUTH=admin-auth-key          # Admin key for database clearing
 
 ## Authentication
 
-Most endpoints require authentication via a Bearer token in the JSON request body:
+Most endpoints require authentication via a Bearer token in the JSON request body under `token`:
 
 ```json
 {
-  "authorization": "Bearer <jwt-token>"
+  "token": "Bearer <jwt-token>"
 }
 ```
 
-You can also send a raw token in `token`, but `authorization` is the preferred body field. For protected endpoint examples below, include that field in the JSON body even when the sample body only shows the endpoint-specific fields.
+Send the JWT in the `token` field in the JSON body. For protected endpoint examples below, include that field in the JSON body even when the sample body only shows the endpoint-specific fields.
 
 Tokens are obtained from `/auth/register` or `/auth/login`.
 
@@ -341,7 +341,7 @@ Get the current authenticated user's profile.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -487,7 +487,7 @@ Search for users by display name, email, or exact user id.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -642,7 +642,7 @@ Remove an external connection. **Authenticated user only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -661,7 +661,7 @@ Get notification preferences.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -860,7 +860,7 @@ Get pending friend requests received.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -894,7 +894,7 @@ Get pending friend requests sent.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -968,7 +968,7 @@ Get list of all friends.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1028,7 +1028,7 @@ Get list of blocked users.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1059,7 +1059,7 @@ Unblock a user.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1140,7 +1140,7 @@ Get all servers the user is a member of.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1294,7 +1294,7 @@ Get server settings. **Only the server owner can view settings.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1426,7 +1426,7 @@ Leave a server.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1512,7 +1512,7 @@ Get the pending ownership transfer for the current user (receiver only).
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1552,7 +1552,7 @@ Get all ownership transfer history for a server. **Owner only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1635,7 +1635,7 @@ Cancel a pending ownership transfer. **Owner only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1707,7 +1707,7 @@ Get all webhooks for a specific channel. **Owner only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1736,7 +1736,7 @@ Get all webhooks for a server. **Owner only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1799,7 +1799,7 @@ Delete a webhook. **Owner only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -1996,7 +1996,7 @@ Get a user's purchased items. **Authenticated user only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2027,7 +2027,7 @@ Purchase an item with currency. **Authenticated user only.**
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2215,7 +2215,7 @@ List all invites for a server.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2248,7 +2248,7 @@ Get a specific invite.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2280,7 +2280,7 @@ Delete an invite.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2468,7 +2468,7 @@ Delete a role. Requires `MANAGE_ROLES` permission.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2551,7 +2551,7 @@ Delete a category. Channels become uncategorized. Requires `MANAGE_CHANNELS` per
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2662,7 +2662,7 @@ Delete a channel. Requires `MANAGE_CHANNELS` permission.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2758,7 +2758,7 @@ Remove a permission overwrite.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2820,7 +2820,7 @@ Get messages in a channel (max 500).
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2896,7 +2896,7 @@ Delete a message (soft delete). Only author or users with `MANAGE_MESSAGES`.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2917,7 +2917,7 @@ Pin a message. Requires `MANAGE_MESSAGES` permission.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2936,7 +2936,7 @@ Get pinned messages.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -2962,7 +2962,7 @@ Unpin a message. Requires `MANAGE_MESSAGES` permission.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3040,7 +3040,7 @@ List custom emojis for a server.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3106,7 +3106,7 @@ Delete a custom emoji. Requires `MANAGE_EMOJIS` permission.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3127,7 +3127,7 @@ Get server audit logs. Requires `VIEW_AUDIT_LOG` or `ADMINISTRATOR` permission.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3215,7 +3215,7 @@ Get all AI chat sessions for the authenticated user.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3241,7 +3241,7 @@ Get a specific chat session with full message history.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3285,7 +3285,7 @@ Delete an AI chat session.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3371,7 +3371,7 @@ Export a chat session to JSON format.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3466,7 +3466,7 @@ Check your current subscription status and CloudCoins balance.
 **Body:**
 ```json
 {
-  "authorization": "Bearer <token>"
+  "token": "Bearer <token>"
 }
 ```
 
@@ -3699,6 +3699,7 @@ Default rate limit: **300 requests per minute** per IP.
 ## License
 
 MIT
+
 
 
 

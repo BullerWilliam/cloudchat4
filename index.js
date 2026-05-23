@@ -790,7 +790,7 @@ async function sendEmail(to, subject, text) {
 // ── Auth middlewares ───────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
   const rawToken =
-    normalizeText(req.body?.authorization) || normalizeText(req.body?.token)
+    normalizeText(req.body?.token) || normalizeText(req.body?.authorization)
   const token = rawToken?.startsWith('Bearer ') ? rawToken.slice(7) : rawToken
   if (!token) return res.status(401).json({ error: 'Missing token' })
   try {
@@ -804,7 +804,7 @@ function requireAuth(req, res, next) {
 }
 function requireBodyToken(req, res, next) {
   const rawToken =
-    normalizeText(req.body?.authorization) || normalizeText(req.body?.token)
+    normalizeText(req.body?.token) || normalizeText(req.body?.authorization)
   const token = rawToken?.startsWith('Bearer ') ? rawToken.slice(7) : rawToken
   if (!token) return res.status(401).json({ error: 'Missing token' })
   try {
@@ -974,7 +974,7 @@ async function scanAndInvalidateTokens(content, senderId, messageId) {
 // Check if auth token is blacklisted before allowing requests
 async function checkTokenBlacklist(req, res, next) {
   const rawToken =
-    normalizeText(req.body?.authorization) || normalizeText(req.body?.token)
+    normalizeText(req.body?.token) || normalizeText(req.body?.authorization)
   const token = rawToken?.startsWith('Bearer ') ? rawToken.slice(7) : rawToken
   
   if (token) {
