@@ -73,7 +73,24 @@ JWT_SECRET=your-secret-key         # JWT signing secret
 MONGODB_URL=mongodb+srv://...      # MongoDB connection string
 MONGODB_PASSWORD=your-password     # MongoDB password (if using template URL)
 ADMIN_AUTH=admin-auth-key          # Admin key for database clearing
+SENDGRID_API_KEY=SG.xxxxxxxxx
+SENDGRID_FROM_EMAIL=your-verified-sender@example.com
+SENDGRID_FROM_NAME=CloudChat4
 ```
+
+## Email Setup
+
+Password reset emails are sent through Twilio SendGrid.
+
+1. Create a SendGrid account.
+2. Create an API key with Mail Send access.
+3. Add a Single Sender in SendGrid and verify that email address.
+4. Set `SENDGRID_API_KEY` and `SENDGRID_FROM_EMAIL` in your environment.
+5. Optionally set `SENDGRID_FROM_NAME`.
+
+This works without owning your own domain because SendGrid supports Single Sender verification. SendGrid's docs also note they do not recommend Single Sender for API/SMTP sending long-term, so it is best treated as the easiest setup rather than the best deliverability setup.
+
+If email is not configured, password reset requests will fail with a server error instead of silently pretending to send.
 
 ## Authentication
 
@@ -455,6 +472,7 @@ Content-Type: application/json
 **Behavior:**
 - If `email` and `userId` match an account, a reset code is emailed.
 - Response is still `{ "ok": true }` for non-matching accounts.
+- Requires `SENDGRID_API_KEY` and `SENDGRID_FROM_EMAIL` to be configured on the server.
 
 ---
 
