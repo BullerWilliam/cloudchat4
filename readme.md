@@ -77,11 +77,15 @@ ADMIN_AUTH=admin-auth-key          # Admin key for database clearing
 
 ## Authentication
 
-Most endpoints require authentication via Bearer token in the Authorization header:
+Most endpoints require authentication via a Bearer token in the JSON request body:
 
+```json
+{
+  "authorization": "Bearer <jwt-token>"
+}
 ```
-Authorization: Bearer <jwt-token>
-```
+
+You can also send a raw token in `token`, but `authorization` is the preferred body field. For protected endpoint examples below, include that field in the JSON body even when the sample body only shows the endpoint-specific fields.
 
 Tokens are obtained from `/auth/register` or `/auth/login`.
 
@@ -334,9 +338,11 @@ Content-Type: application/json
 #### GET /auth/me
 Get the current authenticated user's profile.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -376,7 +382,6 @@ Update the current user's profile.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -410,7 +415,6 @@ Change the authenticated user's display name.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -480,9 +484,11 @@ Content-Type: application/json
 #### GET /users/search
 Search for users by display name, email, or exact user id.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Query Parameters:**
@@ -582,7 +588,6 @@ Add an external connection. **Authenticated user only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -634,9 +639,11 @@ Content-Type: application/json
 #### DELETE /users/:userId/connections/:connectionId
 Remove an external connection. **Authenticated user only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -651,9 +658,11 @@ Authorization: Bearer <token>
 #### GET /users/:userId/notification-settings
 Get notification preferences.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -681,7 +690,6 @@ Update notification preferences.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -737,7 +745,6 @@ Update online status and activity.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -807,7 +814,6 @@ Send a friend request to another user.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -851,9 +857,11 @@ Content-Type: application/json
 #### GET /friends/requests/incoming
 Get pending friend requests received.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -883,9 +891,11 @@ Authorization: Bearer <token>
 #### GET /friends/requests/outgoing
 Get pending friend requests sent.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -917,7 +927,6 @@ Accept or decline a friend request.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -956,9 +965,11 @@ Content-Type: application/json
 #### GET /friends/list
 Get list of all friends.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -985,7 +996,6 @@ Block a user.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1015,9 +1025,11 @@ Content-Type: application/json
 #### GET /blocks
 Get list of blocked users.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1044,9 +1056,11 @@ Authorization: Bearer <token>
 #### DELETE /blocks/:blockedId
 Unblock a user.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1072,7 +1086,6 @@ Create a new server.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1124,9 +1137,11 @@ Content-Type: application/json
 #### GET /servers
 Get all servers the user is a member of.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1276,9 +1291,11 @@ Get detailed server information. **No authentication required.**
 #### GET /servers/:serverId/settings
 Get server settings. **Only the server owner can view settings.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1325,7 +1342,6 @@ Update server settings.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1385,7 +1401,6 @@ Join a server using invite code.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1408,9 +1423,11 @@ Content-Type: application/json
 #### POST /servers/:serverId/leave
 Leave a server.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1438,7 +1455,6 @@ Initiate ownership transfer to another server member. **Owner only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1493,9 +1509,11 @@ Content-Type: application/json
 #### GET /servers/:serverId/ownership-transfer/pending
 Get the pending ownership transfer for the current user (receiver only).
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1531,9 +1549,11 @@ Authorization: Bearer <token>
 #### GET /servers/:serverId/ownership-transfers
 Get all ownership transfer history for a server. **Owner only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1561,7 +1581,6 @@ Accept or decline an ownership transfer. **Receiver only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1613,9 +1632,11 @@ Content-Type: application/json
 #### DELETE /servers/:serverId/ownership-transfer
 Cancel a pending ownership transfer. **Owner only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1636,7 +1657,6 @@ Create a webhook for a channel. **Owner only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1684,9 +1704,11 @@ Content-Type: application/json
 #### GET /servers/:serverId/channels/:channelId/webhooks
 Get all webhooks for a specific channel. **Owner only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1711,9 +1733,11 @@ Authorization: Bearer <token>
 #### GET /servers/:serverId/webhooks
 Get all webhooks for a server. **Owner only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1741,7 +1765,6 @@ Update a webhook's name or image. **Owner only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -1773,9 +1796,11 @@ Content-Type: application/json
 #### DELETE /servers/:serverId/webhooks/:webhookId
 Delete a webhook. **Owner only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1968,9 +1993,11 @@ Content-Type: application/json
 #### GET /users/:userId/inventory
 Get a user's purchased items. **Authenticated user only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -1997,9 +2024,11 @@ Authorization: Bearer <token>
 #### POST /shop/items/:itemId/buy
 Purchase an item with currency. **Authenticated user only.**
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (201 Created):**
@@ -2069,7 +2098,6 @@ Select/unequip a name tag. **Authenticated user only.**
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2140,7 +2168,6 @@ Create a custom invite link.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2185,9 +2212,11 @@ Content-Type: application/json
 #### GET /servers/:serverId/invites
 List all invites for a server.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2216,9 +2245,11 @@ Authorization: Bearer <token>
 #### GET /servers/:serverId/invites/:inviteId
 Get a specific invite.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2246,9 +2277,11 @@ Authorization: Bearer <token>
 #### DELETE /servers/:serverId/invites/:inviteId
 Delete an invite.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2265,7 +2298,6 @@ Accept or decline a server invite.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2342,7 +2374,6 @@ Create a new role. Requires `MANAGE_ROLES` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2397,7 +2428,6 @@ Update a role. Requires `MANAGE_ROLES` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2435,9 +2465,11 @@ Content-Type: application/json
 #### DELETE /servers/:serverId/roles/:roleId
 Delete a role. Requires `MANAGE_ROLES` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2456,7 +2488,6 @@ Create a channel category. Requires `MANAGE_CHANNELS` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2488,7 +2519,6 @@ Update a category. Requires `MANAGE_CHANNELS` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2518,9 +2548,11 @@ Content-Type: application/json
 #### DELETE /servers/:serverId/categories/:categoryId
 Delete a category. Channels become uncategorized. Requires `MANAGE_CHANNELS` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2539,7 +2571,6 @@ Create a channel. Requires `MANAGE_CHANNELS` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2591,7 +2622,6 @@ Update a channel. Requires `MANAGE_CHANNELS` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2629,9 +2659,11 @@ Content-Type: application/json
 #### DELETE /servers/:serverId/channels/:channelId
 Delete a channel. Requires `MANAGE_CHANNELS` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2650,7 +2682,6 @@ Add a permission overwrite. Requires `MANAGE_CHANNELS` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2697,7 +2728,6 @@ Update a permission overwrite.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2725,9 +2755,11 @@ Content-Type: application/json
 #### DELETE /channels/:channelId/overwrites/:overwriteId
 Remove a permission overwrite.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2746,7 +2778,6 @@ Send a message in a channel.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2786,9 +2817,11 @@ Content-Type: application/json
 #### GET /channels/:channelId/messages
 Get messages in a channel (max 500).
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2819,7 +2852,6 @@ Edit a message. Only author or users with `MANAGE_MESSAGES` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2861,9 +2893,11 @@ Content-Type: application/json
 #### DELETE /channels/:channelId/messages/:messageId
 Delete a message (soft delete). Only author or users with `MANAGE_MESSAGES`.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2880,9 +2914,11 @@ Authorization: Bearer <token>
 #### POST /channels/:channelId/pins/:messageId
 Pin a message. Requires `MANAGE_MESSAGES` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2897,9 +2933,11 @@ Authorization: Bearer <token>
 #### GET /channels/:channelId/pins
 Get pinned messages.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2921,9 +2959,11 @@ Authorization: Bearer <token>
 #### DELETE /channels/:channelId/pins/:messageId
 Unpin a message. Requires `MANAGE_MESSAGES` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -2942,7 +2982,6 @@ Add a reaction to a message.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2974,7 +3013,6 @@ Remove your reaction from a message.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -2999,9 +3037,11 @@ Content-Type: application/json
 #### GET /servers/:serverId/emojis
 List custom emojis for a server.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3027,7 +3067,6 @@ Add a custom emoji. Requires `MANAGE_EMOJIS` permission.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -3064,9 +3103,11 @@ Content-Type: application/json
 #### DELETE /servers/:serverId/emojis/:emojiId
 Delete a custom emoji. Requires `MANAGE_EMOJIS` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3083,9 +3124,11 @@ Authorization: Bearer <token>
 #### GET /servers/:serverId/audit-logs
 Get server audit logs. Requires `VIEW_AUDIT_LOG` or `ADMINISTRATOR` permission.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Query Parameters:**
@@ -3137,7 +3180,6 @@ Create a new AI chat session.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -3170,9 +3212,11 @@ Content-Type: application/json
 #### GET /ai/chats
 Get all AI chat sessions for the authenticated user.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3194,9 +3238,11 @@ Authorization: Bearer <token>
 #### GET /ai/chats/:chatId
 Get a specific chat session with full message history.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3236,9 +3282,11 @@ Authorization: Bearer <token>
 #### DELETE /ai/chats/:chatId
 Delete an AI chat session.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3262,7 +3310,6 @@ Send a message to the AI and get a response. The AI receives the last 20 message
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -3321,9 +3368,11 @@ Your message here
 #### GET /ai/chats/:chatId/export
 Export a chat session to JSON format.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3355,7 +3404,6 @@ Import a chat session from JSON.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -3415,9 +3463,11 @@ The platform uses **CloudCoins** as a currency for maintaining an active subscri
 #### GET /subscription/status
 Check your current subscription status and CloudCoins balance.
 
-**Headers:**
-```
-Authorization: Bearer <token>
+**Body:**
+```json
+{
+  "authorization": "Bearer <token>"
+}
 ```
 
 **Response (200 OK):**
@@ -3441,7 +3491,6 @@ Renew your subscription by posting content. Costs **1000 CloudCoins** and extend
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -3502,7 +3551,6 @@ Gift a subscription to another user using your CloudCoins.
 
 **Headers:**
 ```
-Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -3651,3 +3699,7 @@ Default rate limit: **300 requests per minute** per IP.
 ## License
 
 MIT
+
+
+
+
