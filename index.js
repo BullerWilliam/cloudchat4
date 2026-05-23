@@ -15,6 +15,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
+import { Resend } from 'resend'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -30,6 +31,9 @@ const MONGODB_URL =
     process.env.MONGODB_PASSWORD || ''
   )}@cloudchat4.aoxoo9t.mongodb.net/?appName=cloudchat4`
 const ADMIN_AUTH = process.env.ADMIN_AUTH || 'admin-auth'
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || ''
+const RESEND_FROM_NAME = process.env.RESEND_FROM_NAME || 'CloudChat4'
 
 // CloudCoins Subscription Configuration
 const CLOUDCOINS_SUBSCRIPTION_CONFIG = {
@@ -676,6 +680,7 @@ const TokenBlacklist = mongoose.model('TokenBlacklist', tokenBlacklistSchema)
 // ── AI Chat config ─────────────────────────────────────────────────────────
 const HF_TOKEN = process.env.HF_TOKEN || ''
 const hf = new HfInference(HF_TOKEN)
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Helper Functions (utility, middleware, permission checks)
@@ -784,7 +789,24 @@ function generateNumericCode(length = 6) {
 }
 // Placeholder – in a real app you’d plug in nodemailer or another SMTP service.
 async function sendEmail(to, subject, text) {
-  console.log(`[EMAIL] To: ${to} | Subject: ${subject} | Text: ${text}`)
+  if (!resend) {
+    throw new Error('Email is not configured: missing RESEND_API_KEY')
+  }
+  if (!RESEND_FROM_EMAIL) {
+    throw new Error('Email is not configured: missing RESEND_FROM_EMAIL')
+  }
+
+  const { error } = await resend.emails.send({
+    from: `${RESEND_FROM_NAME} <${RESEND_FROM_EMAIL}>`,
+    to: [to],
+    subject,
+    text,
+    html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
+  })
+
+  if (error) {
+    throw new Error(`Resend email error: ${error.message}`)
+  }
 }
 
 // ── Auth middlewares ───────────────────────────────────────────────────────
