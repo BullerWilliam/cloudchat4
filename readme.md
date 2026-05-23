@@ -425,6 +425,7 @@ Content-Type: application/json
 **Body:**
 ```json
 {
+  "token": "Bearer <token>",
   "displayName": "New Name"
 }
 ```
