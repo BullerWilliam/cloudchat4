@@ -15,6 +15,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
+import sgMail from '@sendgrid/mail'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,6 +34,7 @@ const ADMIN_AUTH = process.env.ADMIN_AUTH || 'admin-auth'
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || ''
 const SENDGRID_FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || ''
 const SENDGRID_FROM_NAME = process.env.SENDGRID_FROM_NAME || 'CloudChat4'
+if (SENDGRID_API_KEY) sgMail.setApiKey(SENDGRID_API_KEY)
 
 // CloudCoins Subscription Configuration
 const CLOUDCOINS_SUBSCRIPTION_CONFIG = {
@@ -793,66 +795,15 @@ async function sendEmail(to, subject, text) {
     throw new Error('Email is not configured: missing SENDGRID_FROM_EMAIL')
   }
 
-  const html = `<p>${text.replace(/\n/g, '<br>')}</p>`
-  const payload = JSON.stringify({
-    personalizations: [
-      {
-        to: [{ email: to }],
-        subject,
-      },
-    ],
+  await sgMail.send({
+    to,
     from: {
       email: SENDGRID_FROM_EMAIL,
       name: SENDGRID_FROM_NAME,
     },
-    content: [
-      {
-        type: 'text/plain',
-        value: text,
-      },
-      {
-        type: 'text/html',
-        value: html,
-      },
-    ],
-  })
-
-  await new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: 'api.sendgrid.com',
-        port: 443,
-        path: '/v3/mail/send',
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-        },
-      },
-      (res) => {
-        let data = ''
-        res.on('data', (chunk) => {
-          data += chunk
-        })
-        res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            resolve()
-            return
-          }
-
-          reject(
-            new Error(
-              `SendGrid email error (${res.statusCode || 'unknown'}): ${data || 'Unknown error'}`
-            )
-          )
-        })
-      }
-    )
-
-    req.on('error', reject)
-    req.write(payload)
-    req.end()
+    subject,
+    text,
+    html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
   })
 }
 
