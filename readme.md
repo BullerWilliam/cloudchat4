@@ -3428,7 +3428,7 @@ Authorization: Bearer <token>
     "expiresAt": "2024-02-15T10:30:00.000Z",
     "lastRenewedAt": "2024-01-15T10:30:00.000Z",
     "cloudCoins": 500,
-    "cost": 100,
+    "cost": 1000,
     "durationDays": 30
   }
 }
@@ -3437,7 +3437,7 @@ Authorization: Bearer <token>
 ---
 
 #### POST /subscription/renew
-Renew your subscription by posting content. Costs **100 CloudCoins** and extends subscription by **30 days**.
+Renew your subscription by posting content. Costs **1000 CloudCoins** and extends subscription by **30 days**.
 
 **Headers:**
 ```
@@ -3489,7 +3489,7 @@ Content-Type: application/json
 ```json
 {
   "error": "Insufficient CloudCoins",
-  "required": 100,
+    "required": 1000,
   "current": 50,
   "missing": 50
 }

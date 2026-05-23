@@ -33,7 +33,7 @@ const ADMIN_AUTH = process.env.ADMIN_AUTH || 'admin-auth'
 
 // CloudCoins Subscription Configuration
 const CLOUDCOINS_SUBSCRIPTION_CONFIG = {
-  costInCloudCoins: 100,    // Cost to renew subscription
+  costInCloudCoins: 1000,   // Cost to renew subscription
   durationInDays: 30,       // Subscription lasts 30 days
   minimumPostLength: 10,    // Minimum characters required for a post
 }
