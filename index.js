@@ -788,10 +788,19 @@ async function sendEmail(to, subject, text) {
 }
 
 // ── Auth middlewares ───────────────────────────────────────────────────────
-function requireAuth(req, res, next) {
-  const rawToken =
+function getRequestToken(req, { preferHeader = false } = {}) {
+  const header = req.headers.authorization || ''
+  const headerToken = header.startsWith('Bearer ') ? header.slice(7) : null
+  const rawBodyToken =
     normalizeText(req.body?.token) || normalizeText(req.body?.authorization)
-  const token = rawToken?.startsWith('Bearer ') ? rawToken.slice(7) : rawToken
+  const bodyToken = rawBodyToken?.startsWith('Bearer ')
+    ? rawBodyToken.slice(7)
+    : rawBodyToken
+
+  return preferHeader ? headerToken || bodyToken : bodyToken || headerToken
+}
+function requireAuth(req, res, next) {
+  const token = getRequestToken(req, { preferHeader: req.method === 'GET' })
   if (!token) return res.status(401).json({ error: 'Missing token' })
   try {
     const payload = jwt.verify(token, JWT_SECRET)
@@ -803,9 +812,7 @@ function requireAuth(req, res, next) {
   }
 }
 function requireBodyToken(req, res, next) {
-  const rawToken =
-    normalizeText(req.body?.token) || normalizeText(req.body?.authorization)
-  const token = rawToken?.startsWith('Bearer ') ? rawToken.slice(7) : rawToken
+  const token = getRequestToken(req)
   if (!token) return res.status(401).json({ error: 'Missing token' })
   try {
     const payload = jwt.verify(token, JWT_SECRET)
@@ -973,9 +980,7 @@ async function scanAndInvalidateTokens(content, senderId, messageId) {
 
 // Check if auth token is blacklisted before allowing requests
 async function checkTokenBlacklist(req, res, next) {
-  const rawToken =
-    normalizeText(req.body?.token) || normalizeText(req.body?.authorization)
-  const token = rawToken?.startsWith('Bearer ') ? rawToken.slice(7) : rawToken
+  const token = getRequestToken(req, { preferHeader: req.method === 'GET' })
   
   if (token) {
     const isBlacklisted = await isTokenBlacklisted(token)

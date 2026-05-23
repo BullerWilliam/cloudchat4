@@ -77,15 +77,21 @@ ADMIN_AUTH=admin-auth-key          # Admin key for database clearing
 
 ## Authentication
 
-Most endpoints require authentication via a Bearer token in the JSON request body under `token`:
+Most authenticated endpoints require a Bearer token.
+
+Use the `Authorization` header for protected `GET` requests:
+
+```
+Authorization: Bearer <jwt-token>
+```
+
+Use the JSON body field `token` for other protected requests:
 
 ```json
 {
   "token": "Bearer <jwt-token>"
 }
 ```
-
-Send the JWT in the `token` field in the JSON body. For protected endpoint examples below, include that field in the JSON body even when the sample body only shows the endpoint-specific fields.
 
 Tokens are obtained from `/auth/register` or `/auth/login`.
 
@@ -338,11 +344,9 @@ Content-Type: application/json
 #### GET /auth/me
 Get the current authenticated user's profile.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -484,11 +488,9 @@ Content-Type: application/json
 #### GET /users/search
 Search for users by display name, email, or exact user id.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Query Parameters:**
@@ -658,11 +660,9 @@ Remove an external connection. **Authenticated user only.**
 #### GET /users/:userId/notification-settings
 Get notification preferences.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -857,11 +857,9 @@ Content-Type: application/json
 #### GET /friends/requests/incoming
 Get pending friend requests received.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -891,11 +889,9 @@ Get pending friend requests received.
 #### GET /friends/requests/outgoing
 Get pending friend requests sent.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -965,11 +961,9 @@ Content-Type: application/json
 #### GET /friends/list
 Get list of all friends.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1025,11 +1019,9 @@ Content-Type: application/json
 #### GET /blocks
 Get list of blocked users.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1137,11 +1129,9 @@ Content-Type: application/json
 #### GET /servers
 Get all servers the user is a member of.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1291,11 +1281,9 @@ Get detailed server information. **No authentication required.**
 #### GET /servers/:serverId/settings
 Get server settings. **Only the server owner can view settings.**
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1509,11 +1497,9 @@ Content-Type: application/json
 #### GET /servers/:serverId/ownership-transfer/pending
 Get the pending ownership transfer for the current user (receiver only).
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1549,11 +1535,9 @@ Get the pending ownership transfer for the current user (receiver only).
 #### GET /servers/:serverId/ownership-transfers
 Get all ownership transfer history for a server. **Owner only.**
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1704,11 +1688,9 @@ Content-Type: application/json
 #### GET /servers/:serverId/channels/:channelId/webhooks
 Get all webhooks for a specific channel. **Owner only.**
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1733,11 +1715,9 @@ Get all webhooks for a specific channel. **Owner only.**
 #### GET /servers/:serverId/webhooks
 Get all webhooks for a server. **Owner only.**
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -1993,11 +1973,9 @@ Content-Type: application/json
 #### GET /users/:userId/inventory
 Get a user's purchased items. **Authenticated user only.**
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -2212,11 +2190,9 @@ Content-Type: application/json
 #### GET /servers/:serverId/invites
 List all invites for a server.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -2245,11 +2221,9 @@ List all invites for a server.
 #### GET /servers/:serverId/invites/:inviteId
 Get a specific invite.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -2817,11 +2791,9 @@ Content-Type: application/json
 #### GET /channels/:channelId/messages
 Get messages in a channel (max 500).
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -2933,11 +2905,9 @@ Pin a message. Requires `MANAGE_MESSAGES` permission.
 #### GET /channels/:channelId/pins
 Get pinned messages.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -3037,11 +3007,9 @@ Content-Type: application/json
 #### GET /servers/:serverId/emojis
 List custom emojis for a server.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -3124,11 +3092,9 @@ Delete a custom emoji. Requires `MANAGE_EMOJIS` permission.
 #### GET /servers/:serverId/audit-logs
 Get server audit logs. Requires `VIEW_AUDIT_LOG` or `ADMINISTRATOR` permission.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Query Parameters:**
@@ -3212,11 +3178,9 @@ Content-Type: application/json
 #### GET /ai/chats
 Get all AI chat sessions for the authenticated user.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -3238,11 +3202,9 @@ Get all AI chat sessions for the authenticated user.
 #### GET /ai/chats/:chatId
 Get a specific chat session with full message history.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -3368,11 +3330,9 @@ Your message here
 #### GET /ai/chats/:chatId/export
 Export a chat session to JSON format.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
@@ -3463,11 +3423,9 @@ The platform uses **CloudCoins** as a currency for maintaining an active subscri
 #### GET /subscription/status
 Check your current subscription status and CloudCoins balance.
 
-**Body:**
-```json
-{
-  "token": "Bearer <token>"
-}
+**Headers:**
+```
+Authorization: Bearer <token>
 ```
 
 **Response (200 OK):**
