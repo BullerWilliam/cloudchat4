@@ -25,6 +25,7 @@ import { HfInference } from '@huggingface/inference'
 
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret'
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'cloudchat4'
 const MONGODB_URL =
   process.env.MONGODB_URL ||
   `mongodb+srv://mongo:${encodeURIComponent(
@@ -4377,9 +4378,9 @@ async function dropLegacyUsernameIndex() {
 
 async function start() {
   try {
-    await mongoose.connect(MONGODB_URL)
+    await mongoose.connect(MONGODB_URL, { dbName: MONGODB_DB_NAME })
     await dropLegacyUsernameIndex()
-    console.log('✅ MongoDB connected')
+    console.log(`✅ MongoDB connected (${MONGODB_DB_NAME})`)
     app.listen(PORT, () => {
       console.log(`🚀 API running on port ${PORT}`)
       // Start self-ping to keep Render instance alive

@@ -71,6 +71,7 @@ Response:
 PORT=3000                          # Server port (default: 3000)
 JWT_SECRET=your-secret-key         # JWT signing secret
 MONGODB_URL=mongodb+srv://...      # MongoDB connection string
+MONGODB_DB_NAME=cloudchat4         # Database name used for persistent app data
 MONGODB_PASSWORD=your-password     # MongoDB password (if using template URL)
 ADMIN_AUTH=admin-auth-key          # Admin key for database clearing
 SENDGRID_API_KEY=SG.xxxxxxxxx
