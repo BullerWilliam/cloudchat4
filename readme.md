@@ -1129,6 +1129,7 @@ Content-Type: application/json
     "bannerUrl": "",
     "splashUrl": "",
     "description": "A place for friends",
+    "isPublic": false,
     "ownerId": "65a123...",
     "rulesText": "Be nice!",
     "verificationLevel": "none",
@@ -1163,8 +1164,44 @@ Authorization: Bearer <token>
       "name": "My Awesome Server",
       "iconUrl": "",
       "description": "A place for friends",
+      "isPublic": false,
       "ownerId": "65a123...",
       "createdAt": "2024-01-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### GET /servers/discover
+Get all public servers that should appear in the discover tab. **No authentication required.**
+
+Public servers are discoverable. Private servers are hidden from this endpoint and should not appear in discover.
+
+**Response (200 OK):**
+```json
+{
+  "servers": [
+    {
+      "_id": "65e345...",
+      "name": "My Awesome Server",
+      "iconUrl": "",
+      "bannerUrl": "",
+      "splashUrl": "",
+      "description": "A place for friends",
+      "isPublic": true,
+      "ownerId": "65a123...",
+      "rulesText": "Be nice!",
+      "verificationLevel": "none",
+      "explicitContentFilter": "disabled",
+      "defaultMessageNotifications": "ALL",
+      "afkChannelId": null,
+      "systemChannelId": null,
+      "inviteCode": "a1b2c3d4...",
+      "createdAt": "2024-01-15T12:00:00.000Z",
+      "memberCount": 42,
+      "channelCount": 8
     }
   ]
 }
@@ -1185,6 +1222,7 @@ Get detailed server information. **No authentication required.**
     "bannerUrl": "",
     "splashUrl": "",
     "description": "A place for friends",
+    "isPublic": false,
     "ownerId": "65a123...",
     "rulesText": "Be nice!",
     "verificationLevel": "none",
@@ -1316,6 +1354,7 @@ Authorization: Bearer <token>
     "bannerUrl": "",
     "splashUrl": "",
     "description": "A place for friends",
+    "isPublic": false,
     "ownerId": "65a123...",
     "rulesText": "Be nice!",
     "verificationLevel": "none",
@@ -1361,6 +1400,7 @@ Content-Type: application/json
   "bannerUrl": "https://example.com/banner.png",
   "splashUrl": "https://example.com/splash.png",
   "description": "Updated description",
+  "isPublic": true,
   "rulesText": "Updated rules",
   "verificationLevel": "medium",
   "explicitContentFilter": "members_without_roles",
@@ -1376,6 +1416,7 @@ Content-Type: application/json
 - `bannerUrl` - Banner image URL
 - `splashUrl` - Splash screen URL
 - `description` - Description
+- `isPublic` - Whether the server appears in the discover tab
 - `rulesText` - Rules text
 - `verificationLevel` - `none`, `low`, `medium`, `high`
 - `explicitContentFilter` - `disabled`, `members_without_roles`, `all_members`
@@ -1399,6 +1440,68 @@ Content-Type: application/json
 ```json
 {
   "error": "Only the server owner can edit settings"
+}
+```
+
+---
+
+#### POST /servers/:serverId/public
+Make a server public. **Only the server owner can do this.**
+
+When a server is public, it can be found from the discover tab via `GET /servers/discover`.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "server": {
+    "_id": "65e345...",
+    "name": "My Awesome Server",
+    "isPublic": true
+  }
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Only the server owner can make the server public"
+}
+```
+
+---
+
+#### POST /servers/:serverId/private
+Make a server private. **Only the server owner can do this.**
+
+When a server is private, it is hidden from the discover tab and `GET /servers/discover`.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "ok": true,
+  "server": {
+    "_id": "65e345...",
+    "name": "My Awesome Server",
+    "isPublic": false
+  }
+}
+```
+
+**Response (403 Forbidden):**
+```json
+{
+  "error": "Only the server owner can make the server private"
 }
 ```
 

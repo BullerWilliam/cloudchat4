@@ -243,6 +243,7 @@ const serverSchema = new mongoose.Schema({
   bannerUrl: { type: String, default: '' }, // new
   splashUrl: { type: String, default: '' }, // new
   description: { type: String, default: '' },
+  isPublic: { type: Boolean, default: false },
   ownerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -1811,6 +1812,30 @@ app.get(
 )
 
 app.get(
+  '/servers/discover',
+  asyncHandler(async (req, res) => {
+    const servers = await Server.find({ isPublic: true }).sort({ createdAt: -1 }).lean()
+
+    const discoveredServers = await Promise.all(
+      servers.map(async (server) => {
+        const [memberCount, channelCount] = await Promise.all([
+          ServerMember.countDocuments({ serverId: server._id }),
+          Channel.countDocuments({ serverId: server._id }),
+        ])
+
+        return {
+          ...server,
+          memberCount,
+          channelCount,
+        }
+      })
+    )
+
+    res.json({ servers: discoveredServers })
+  })
+)
+
+app.get(
   '/servers/:serverId',
   asyncHandler(async (req, res) => {
     const serverDoc = await Server.findById(req.params.serverId)
@@ -1883,6 +1908,7 @@ app.patch(
       'bannerUrl',
       'splashUrl',
       'description',
+      'isPublic',
       'rulesText',
       'verificationLevel',
       'explicitContentFilter',
@@ -1903,6 +1929,60 @@ app.patch(
       { updatedFields: allowed.filter((k) => req.body[k] !== undefined) }
     )
     res.json({ server })
+  })
+)
+
+app.post(
+  '/servers/:serverId/public',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res
+        .status(403)
+        .json({ error: 'Only the server owner can make the server public' })
+
+    server.isPublic = true
+    await server.save()
+
+    await createAuditLog(
+      server._id,
+      'SERVER_VISIBILITY_PUBLIC',
+      req.user._id,
+      null,
+      { isPublic: true }
+    )
+
+    res.json({ ok: true, server })
+  })
+)
+
+app.post(
+  '/servers/:serverId/private',
+  requireAuth,
+  loadUser,
+  asyncHandler(async (req, res) => {
+    const server = await Server.findById(req.params.serverId)
+    if (!server) return res.status(404).json({ error: 'Server not found' })
+    if (server.ownerId.toString() !== req.user._id.toString())
+      return res
+        .status(403)
+        .json({ error: 'Only the server owner can make the server private' })
+
+    server.isPublic = false
+    await server.save()
+
+    await createAuditLog(
+      server._id,
+      'SERVER_VISIBILITY_PRIVATE',
+      req.user._id,
+      null,
+      { isPublic: false }
+    )
+
+    res.json({ ok: true, server })
   })
 )
 
